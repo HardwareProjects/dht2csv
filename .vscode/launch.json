@@ -1,0 +1,41 @@
+// A launch configuration in this file is executed with F5 
+// or when selecting and starting a configuration in the debug view.
+
+// Available variables which can be used inside of strings.
+// ${workspaceRoot}: the root folder of the team
+// ${file}: the current opened file
+// ${fileBasename}: the current opened file's basename
+// ${fileDirname}: the current opened file's dirname
+// ${fileExtname}: the current opened file's extension
+// ${cwd}: the current working directory of the spawned process
+{
+	"version": "0.2.0",
+	 "configurations": [
+        {
+            "name": "Debug app.ts",
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceRoot}/src/app.ts",
+            "stopOnEntry": false,
+            "args": [],
+            "cwd": "${workspaceRoot}",
+            "sourceMaps": true,
+            "preLaunchTask": "build",
+            // Path to generated JavaScript files for debugger.
+            "outDir": "${workspaceRoot}/lib"
+        },
+        {
+			"name": "Debug Current Unittest File",
+			"type": "node",
+			"request": "launch",
+			"program": "${file}",
+			"stopOnEntry": false,
+			"args": [],
+			"cwd": "${workspaceRoot}",
+			"sourceMaps": true,
+            "preLaunchTask": "test",
+            // Path to generated JavaScript files for debugger.
+			"outDir": "${workspaceRoot}/test/out/test"
+		}
+    ]
+}

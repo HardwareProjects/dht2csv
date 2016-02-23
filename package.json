@@ -1,0 +1,46 @@
+{
+  "name": "dht2csv",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/HardwareProjects/dht2csv"
+  },
+  "description": "Reads DHT22, DHT11 or AM2302 sensor values, writes to CSV.",
+  "keywords": [
+    "dht",
+    "dht22",
+    "dht11",
+    "AM2302",
+    "temperature",
+    "humidity",
+    "sensor",
+    "dht2csv",
+    "raspberrypi"
+  ],
+  "main": "lib/app.js",
+  "bin": {
+    "dht2csv": "./dht2csv"
+  },
+  "scripts": {
+    "start": "node lib/app.js"
+  },
+  "author": {
+    "name": "David Neuy",
+    "email": "",
+    "url": "http://hardwareprojects.com"
+  },
+  "license": "MIT",
+    "engines": {
+    "node": ">=5.1.0"
+  },
+  "dependencies": {
+    "lodash": "^4.5.0",
+    "mkdirp": "^0.5.1",
+    "node-dht-sensor": "0.0.11",
+    "sprintf-js": "^1.0.3",
+    "strip-json-comments": "^2.0.1",
+    "winston": "^2.1.1"
+  },
+  "devDependencies": {
+    "tape": "^4.4.0"
+  }
+}
