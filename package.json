@@ -36,7 +36,6 @@
     "lodash": "^4.5.0",
     "mkdirp": "^0.5.1",
     "node-dht-sensor": "git+https://github.com/HardwareProjects/node-dht-sensor.git",
-    "sprintf-js": "^1.0.3",
     "strip-json-comments": "^2.0.1"
   },
   "devDependencies": {
