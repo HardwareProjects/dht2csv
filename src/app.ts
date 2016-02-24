@@ -125,6 +125,8 @@ async function main() {
     console.info(`Script started. See the '${configFileName}' for the logfilePath and the output directory of the sensor values.`);
     await openFilesEnsureHeader();
 
+    // Tell wiringPi to use /dev/gpiomem instead of /dev/gpio so that no admin privileges are needed on Raspbian.
+    process.env["WIRINGPI_GPIOMEM"] = 1;
     // Call node-dht-sensor Lib, which will initialize the native wiringPi library.
     // A failure here has nothing to do with the sensor but likely with the installation of the wiringPi library.
     const isInitialized = sensorLib.initialize(config.sensors[0].type, config.sensors[0].pin);

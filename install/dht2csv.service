@@ -1,0 +1,18 @@
+# Copy this file to directory /etc/systemd/system
+# Make the daemon aware of the service:           sudo systemctl daemon-reload
+# Start the service:                              sudo systemctl start dht2csv.service
+# Stop the service:                               sudo systemctl stop  dht2csv.service
+# To start the service automatically at boot:     sudo systemctl enable dht2csv.service
+# To not start the service automatically at boot: sudo systemctl disable dht2csv.service
+# Check service status:                           systemctl status dht2csv.service
+[Unit]
+Description=Reads DHT22, DHT11 or AM2302 sensor values, writes to CSV. 
+ 
+[Service]
+ExecStart=/usr/bin/node /home/pi/projects/dht2csv/lib/app.js
+Restart=always
+User=pi
+Group=pi
+ 
+[Install]
+WantedBy=multi-user.target
