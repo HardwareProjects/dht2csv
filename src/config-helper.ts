@@ -1,14 +1,18 @@
 /// <reference path="../typings/lib.es6.d.ts" />
 /// <reference path="../typings/node/node.d.ts" />
+/// <reference path="../typings/lodash/lodash.d.ts" />
 /// <reference path="../typings/strip-json-comments/strip-json-comments.d.ts" />
 
 "use strict";
 
 import * as path from "path";
+import * as _ from "lodash";
+// es6 (default) import syntax not working with strip-json-comments.
 const stripcomment = require("strip-json-comments");
 
 import * as fsp from "./fs-promises";
 import "./global-extensions";
+import { loglevels } from "./logger";
 
 const configFilename            = "sensorconfig.json";
 const temperatureValuesFilename = "temperature_celsius.csv";
@@ -29,21 +33,15 @@ export interface Sensor {
 
 export interface Config {
     sensors:        Sensor[];
-    userAfterInit:  string;
-    uidAfterInit:   number;
-    groupAfterInit: string;
-    gidAfterInit:   number;
     loglevel:       string;
     logfilePath:    string;
     baseDir:        string;
 }
 
-export async function processConfig(baseDir: string, configName: string) {
+export async function processConfig(baseDir: string, configName: string, logFn: { (level: string, format: string, ...params: any[]): void }) {
     const configPath = path.resolve(baseDir, configFilename);
     const config = await parseConfig(configPath);
-    checkConfig(config, configPath);
-    config.uidAfterInit = await UsernameToUid(config.userAfterInit);
-    config.gidAfterInit = await GroupnameToGid(config.groupAfterInit);
+    checkConfig(config, configPath, logFn);
     config.baseDir = baseDir;
     config.logfilePath = path.resolve(baseDir, config.logfilePath);
 
@@ -72,13 +70,12 @@ function parseConfig(configPath: string) {
     });
 }
 
-function checkConfig(config: Config, configPath: string) {
+function checkConfig(config: Config, configPath: string, logFn: { (level: string, format: string, ...params: any[]): void }) {
     const errors = [] as string[];
     if (config.sensors == null || config.sensors.length === 0) {
         errors.push("No sensors defnined.");
     }
-    const loglevels = ["error", "warn", "info", "verbose", "debug", "silly"];
-    if (config.loglevel == null || loglevels.contains(config.loglevel) === false) {
+    if (config.loglevel == null || _.keys(loglevels).contains(config.loglevel) === false) {
         errors.push("loglevel not supported, must be 'error', 'warn', 'info', 'verbose', 'debug' or 'silly'.");
     }
     for (const sensor of config.sensors) {
@@ -93,41 +90,11 @@ function checkConfig(config: Config, configPath: string) {
         }
     }
     if (errors.length > 0) {
-        console.error("Some values in the config file are not correct.");
-        console.error("Check the file '" + configPath + "' for the following errors:");
+        logFn("error", "Some values in the config file are not correct.");
+        logFn("error", "Check the file '" + configPath + "' for the following errors:");
         for (const err of errors) {
-            console.error(err);
+            logFn("error", err);
         }
         process.exit(1);
     }
-}
-
-function UsernameToUid(username: string) {
-    return new Promise<number>((resolve, reject) => {
-        if (process.geteuid && process.seteuid) {
-            const savedUid = process.geteuid();
-            process.seteuid(username);
-            const uid = process.geteuid();
-            process.seteuid(savedUid);
-            resolve(uid);
-        } else {
-            // On non-posix plattforms
-            resolve(0);
-        }
-    });
-}
-
-function GroupnameToGid(groupname: string) {
-    return new Promise<number>((resolve, reject) => {
-        if (process.getegid && process.setegid) {
-            const savedGid = process.getegid();
-            process.setegid(groupname);
-            const gid = process.getegid();
-            process.setegid(savedGid);
-            resolve(gid);
-        } else {
-            // On non-posix plattforms
-            resolve(0);
-        }
-    });
 }

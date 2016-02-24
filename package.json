@@ -37,8 +37,7 @@
     "mkdirp": "^0.5.1",
     "node-dht-sensor": "git+https://github.com/HardwareProjects/node-dht-sensor.git",
     "sprintf-js": "^1.0.3",
-    "strip-json-comments": "^2.0.1",
-    "winston": "^2.1.1"
+    "strip-json-comments": "^2.0.1"
   },
   "devDependencies": {
     "tape": "^4.4.0"

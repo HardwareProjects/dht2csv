@@ -19,15 +19,9 @@
     }
 ],
 
-// User under which the process will run after init, and the owner of the logfile. (The process starts as root.)
-"userAfterInit": "pi",
-
-// Group under which the process will run after init, and the group of the logfile. (The process starts as root.)
-"groupAfterInit": "pi",
-
 // Verbosity of the log messages. Eg: "warn" (log unmet assumtions and errors) or "debug" (log as much as possible)
 "loglevel": "debug",
 
-// File path where to write warnings, errors or debug messages.
+// File path where to write warnings, errors or debug messages. Can be absolute or relative. Use "stdout" for standard output.
 "logfilePath": "dht2csv.js.log"
 }
