@@ -7,26 +7,25 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { format, inspect } from "util";
+import * as util from "util";
 import * as _ from "lodash";
 
-// The node-dht-sensor module reads gpio pins of the BCM2835 chip of the Raspberry Pi.
-// The line will load the native node_dht_sensor.node module, which only succees on the Raspberry Pi.
+// The used version of the node-dht-sensor module reads gpio pins using the wiringPi library.
+// The line will load the native node_dht_sensor.node module, which only succeeds if wiringPi is installed.
 import * as sensorLib from "node-dht-sensor";
 
 import "./global-extensions";
 import * as fsp from "./fs-promises";
 import * as processp from "./process-promises";
 import { Sensor, Config, processConfig } from "./config-helper";
-import { LoggerInstance, createLogger, logErrorAndExit } from "./log-helper";
 import { getIsoDate } from "./isodate-helper";
+import { init as initLogger, info, warn, log } from "./logger";
 
 // This file is located in the lib subdirectory when executed, so baseDir is one level up.
 const baseDir = path.resolve(__dirname, "..");
-console.log("basedir: " + baseDir);
-const configName = "sensorconfig.json";
+const configFileName = "sensorconfig.json";
 let config: Config = null;
-let logger: LoggerInstance = null;
+
 
 // Lookup with the sensorName as key and the file descriptors for the 2 minutes historical values as value.
 let sensorToValuesFd: { [sensorName: string]: { fdTemperature: number, fdHumidity: number } } = {};
@@ -35,29 +34,33 @@ let sensorToLatestFd: { [sensorName: string]: { fdTemperature: number, fdHumidit
 // Lookup with the sensorName as key and the latest sensor value as value.
 let sensorToVal: { [sensorName: string]: { temperatureC: number, humidityRel: number } } = {};
 
-// function is called recursively after the 2 second timeout.
-function readSensors(sensor: Sensor) {
+// Function is called recursively after the 2 second timeout.
+function readSensors(sensor: Sensor, count: number) {
+    info(`In readSensors. sensor.name '${sensor.name}', sensor.pin '${sensor.pin}', count '${count}'.`);
     const readout = sensorLib.read();
     const hrstart = process.hrtime();
     if (readout.isValid === false) {
-        logger.warn(`Error reading sensor with name '${sensor.name}', type '${sensor.type}' on pin '${sensor.pin}'. Error count '${readout.errors}'.`);
+        warn(`Error reading sensor with name '${sensor.name}', type '${sensor.type}' on pin '${sensor.pin}'. Error count '${readout.errors}'.`);
     } else {
-        // do not wait until data is written.
-        onNewSensorReadout(sensor.name, readout.temperature, readout.humidity);
+        // Skip first 2 readouts because they are 0.
+        if (++count > 2) {
+            // Do not wait until data is written.
+            onNewSensorReadout(sensor.name, readout.temperature, readout.humidity);
+        }
     }
     const hrend = process.hrtime(hrstart);
     // hrend[0] contains passed seconds, hrend[1] contains passed nanoseconds
     const msDuration = hrend[0] * 1000.0 + hrend[1] / 1000000.0;
-    // collecting period (or sampling period) is 2000 ms for DHT22 and 1000 ms for DHT11. Here set to 2000 because node-dht-sensor lib returns previous measurement if called earlier.
+    // Collecting period (or sampling period) is 2000 ms for DHT22 and 1000 ms for DHT11. Here set to 2000 because node-dht-sensor lib returns previous measurement if called earlier.
     const durationBetweenSamples = 2000;
-    // substract time since last read from durationBetweenSamples.
-    // could subtract further 520 ms based on the two bcm2835_delay(xx) statements in readDHT function in node-dht-sensor.cpp
-    setTimeout(readSensors, Math.max(0, durationBetweenSamples - msDuration), sensor);
+    // Substract time since last read from durationBetweenSamples.
+    // Could subtract further 520 ms based on the two bcm2835_delay(xx) statements in readDHT function in node-dht-sensor.cpp
+    setTimeout(readSensors, Math.max(0, durationBetweenSamples - msDuration), sensor, count);
 }
 
-// function is called when a new sensor value was read. This is about every 2 seconds.
+// Function is called when a new sensor value was read. This is about every 2 seconds.
 async function onNewSensorReadout(sensorName: string, temperatureC: number, humidityRel: number) {
-    console.info("onNewSensorReadout " + temperatureC + " " + humidityRel);
+    info(`In onNewSensorReadout. sensorName '${sensorName}', temperatureC '${temperatureC}', humidityRel '${humidityRel}'.`);
     sensorToVal[sensorName] = { temperatureC: temperatureC, humidityRel: humidityRel };
     const now = new Date();
     await fsp.ftruncate(sensorToLatestFd[sensorName].fdTemperature);
@@ -67,15 +70,17 @@ async function onNewSensorReadout(sensorName: string, temperatureC: number, humi
 }
 
 function onTwoMinuteIntervall() {
-    console.info("onTwoMinuteIntervall");
+    info("In onTwoMinuteIntervall.");
     for (const sensor of config.sensors) {
         const now = new Date();
+        // Do not wait for writeSensorVal to return.
         writeSensorVal(sensorToValuesFd[sensor.name].fdTemperature, sensorToVal[sensor.name].temperatureC, now, true);
         writeSensorVal(sensorToValuesFd[sensor.name].fdHumidity, sensorToVal[sensor.name].humidityRel, now, true);
     }
 }
 
 async function writeSensorVal(fd: number, sensorVal: number, date: Date, addNewLine: boolean) {
+    info(`In writeSensorVal. fd '${fd}',  sensorVal '${sensorVal}', date '${date}', addNewLine '${addNewLine}'.`);
     // Length of a data line in the output file excluding \n character.
     const totalRowLen = 32;
     const dateWithPadding = getIsoDate(date) + ",      ";
@@ -86,8 +91,9 @@ async function writeSensorVal(fd: number, sensorVal: number, date: Date, addNewL
 
 // Ensures the baseDir directory exists, opens the temperatureValues files and writes a header if the file is empty.
 async function openFilesEnsureHeader() {
+    info("In openFilesEnsureHeader");
     async function openFilesEnsureHeaderHelper(filePath: string, header: string) {
-        console.info(`Opening or creating file '${filePath}' and writing header if it contains zero bytes.`);
+        info(`Opening or creating file '${filePath}' and writing header if it contains zero bytes.`);
         const fd = await fsp.open(filePath, "a");
         const fstat = await fsp.fstat(fd);
         if (fstat.stats.size === 0) {
@@ -98,7 +104,7 @@ async function openFilesEnsureHeader() {
 
     for (const sensor of config.sensors) {
         const dir = path.resolve(baseDir, sensor.outputBasepath, sensor.name);
-        console.info(`Creating directory for sensor data files if not existing '${dir}'.`);
+        info(`Creating directory '${dir}' for sensor data files if not existing.`);
         await fsp.mkdirp(dir);
 
         const fdTemperature = await openFilesEnsureHeaderHelper(sensor.temperatureValuesPath, "Iso Date,Temperature in Celsius\n");
@@ -112,23 +118,26 @@ async function openFilesEnsureHeader() {
 }
 
 async function main() {
-    config = await processConfig(baseDir, configName);
-    logger = await createLogger(config);
-    console.info("Script started. Writing all log messages to the logfilePath specified in 'sensorconfig.json'.");
-    logger.info("Config parsed, logger initialized.");
+    // Do not log method name, because logfile is not open yet.
+    config = await processConfig(baseDir, configFileName, log);
+    await initLogger(config.logfilePath, config.loglevel);
+    // Log once to console to give a feedback that the script started successfully.
+    console.info(`Script started. See the '${configFileName}' for the logfilePath and the output directory of the sensor values.`);
     await openFilesEnsureHeader();
 
-    // Call node-dht-sensor Lib, which will initialize the native BCM2835 library.
-    // A failure here has nothing to do with the sensor but likely with the installation of the BCM2835 library.
+    // Call node-dht-sensor Lib, which will initialize the native wiringPi library.
+    // A failure here has nothing to do with the sensor but likely with the installation of the wiringPi library.
     const isInitialized = sensorLib.initialize(config.sensors[0].type, config.sensors[0].pin);
     if (! isInitialized) {
-        logErrorAndExit(logger, "Failed to call 'initialize' on the 'node-dht-sensor' library. "
-            + "'initialize' in turn initializes the native 'BCM2835' library. Check the github page of 'node-dht-sensor' for help.");
+        throw new Error("Failed to call 'initialize' on the 'node-dht-sensor' library. "
+            + "'initialize' in turn initializes the native 'wiringPi' library.");
     }
     for (const sensor of config.sensors) {
-        readSensors(sensor);
+        readSensors(sensor, 0);
     }
     setInterval(onTwoMinuteIntervall, 1000 * 120);
 }
 
-main().catch(err => logErrorAndExit(logger, err));
+main().catch(err => {
+    log("error", err);
+});

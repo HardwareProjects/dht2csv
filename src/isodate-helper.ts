@@ -28,7 +28,12 @@ export function setWeekdayZero(isoDateStr: string) {
 }
 
 export function getIsoDate(date: Date) {
-    const a = date.toISOString().substr(0, 19) + getTimezoneString(date);
+    // Normally toISOString returns the UTC date. But when the minutes from getTimezoneOffset 
+    // are subtracted, then toISOString will return the local date in ISO format.
+    const localDate = new Date(date.valueOf() + (date.getTimezoneOffset() * -1 * 60 * 1000));
+    // Replace the milliseconds and the UTC time indicator 'Z' with the timezone offset.
+    const a = localDate.toISOString().substr(0, 19) + getTimezoneString(date);
+    // The result is a string in the format '2016-02-24T15:42:54+01:00'.
     return a;
 }
 
@@ -38,7 +43,8 @@ function getTimezoneString(date: Date) {
     const absTotalMinues = Math.abs(totalMinutes);
     const hours = Math.floor(absTotalMinues / 60);
     const minutes = absTotalMinues % 60;
-    const a = totalMinutes >= 0 ? "+" : "-"
+    // timezoneOffset is the inverse of UTC offset, so use + if totalMinutes is negative.
+    const a = (totalMinutes <= 0 ? "+" : "-")
         + (hours / 100).toFixed(2).substring(2) + ":"
         + (minutes / 100).toFixed(2).substring(2);
      return a;
