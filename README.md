@@ -23,8 +23,8 @@ sudo systemctl daemon-reload
 # Make it autostart on boot.
 sudo systemctl enable dht2csv.service
 
-# Start it.
-sudo systemctl start dht2csv.service
+# A reboot is required because of the gpio.rules.
+sudo reboot
 
 # Check status.
 systemctl status dht2csv.service
