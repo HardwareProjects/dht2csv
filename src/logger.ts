@@ -25,6 +25,14 @@ export async function init(logfilePath: string, loglevel: string) {
     isInitialized = true;
 }
 
+// returns true if the logging level is info or higher.
+export function isInfo() {
+    if (! isInitialized) {
+        throw new Error("Must call init first.");
+    }
+    return (loglevels as any)[loglevel] >= (loglevels as any)["info"];
+}
+
 export async function info(format: string, ...params: any[]): Promise<void>;
 export async function info(format: string, params: any): Promise<void> {
     log("info", format, params);

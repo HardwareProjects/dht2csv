@@ -1,0 +1,28 @@
+// This is the config file which is used by the dht2csv app.
+
+{
+    // Specify information about the attached DHT temperature and humidity sensors here.
+    // The property 'sensors' contains an array of objects.
+    // Each object describes a sensor.
+    "sensors": [ 
+        // The path and name of the output files with the sensor values are:
+        // ${sensordataBasepath}/${name}/temperature_celsius.csv and 
+        // ${sensordataBasepath}/${name}/humidity_percent.csv
+        {
+            // Name of the sensor. Must be a valid folder name. Can be hierarchical like "floor1/south-terrace"
+            "name": "living-room",
+            // Sensor type: 11 (DHT11) or 22 (DHT22 or AM2302)
+            "type": 22,
+            // GPIO pin of sensor.
+            "pin": 4
+        }
+    ],
+    // Relative or absolute base path for the sesnsordata csv files.
+    "sensordataBasepath": "./sensordata/",
+            
+    // Verbosity of the log messages. Eg: "warn" (log unmet assumtions and errors) or "debug" (log as much as possible)
+    "loglevel": "debug",
+
+    // File path where to write warnings, errors or debug messages. Can be absolute or relative. Use "stdout" for standard output.
+    "logfilePath": "dht2csv.js.log"
+}
