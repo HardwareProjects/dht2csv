@@ -19,12 +19,14 @@ import * as fsp from "./fs-promises";
 import * as processp from "./process-promises";
 import { Sensor, Config, processConfig } from "./config-helper";
 import { getIsoDate } from "./isodate-helper";
-import { init as initLogger, info, warn, log } from "./logger";
+import { init as initLogger, info, warn, log, isInfo as isLoglevelInfoOrVerboser } from "./logger";
 
 // This file is located in the lib subdirectory when executed, so baseDir is one level up.
 const baseDir = path.resolve(__dirname, "..");
-const configFileName = "sensorconfig.json";
+const configFileName = "config.json";
 let config: Config = null;
+// will be set to true if the logging level is info or higher.
+let isInfo: boolean = null;
 
 
 // Lookup with the sensorName as key and the file descriptors for the 2 minutes historical values as value.
@@ -36,7 +38,7 @@ let sensorToVal: { [sensorName: string]: { temperatureC: number, humidityRel: nu
 
 // Function is called recursively after the 2 second timeout.
 function readSensors(sensor: Sensor, count: number) {
-    info(`In readSensors. sensor.name '${sensor.name}', sensor.pin '${sensor.pin}', count '${count}'.`);
+    isInfo && info(`In readSensors. sensor.name '${sensor.name}', sensor.pin '${sensor.pin}', count '${count}'.`);
     const readout = sensorLib.read();
     const hrstart = process.hrtime();
     if (readout.isValid === false) {
@@ -60,40 +62,40 @@ function readSensors(sensor: Sensor, count: number) {
 
 // Function is called when a new sensor value was read. This is about every 2 seconds.
 async function onNewSensorReadout(sensorName: string, temperatureC: number, humidityRel: number) {
-    info(`In onNewSensorReadout. sensorName '${sensorName}', temperatureC '${temperatureC}', humidityRel '${humidityRel}'.`);
+    isInfo && info(`In onNewSensorReadout. sensorName '${sensorName}', temperatureC '${temperatureC}', humidityRel '${humidityRel}'.`);
     sensorToVal[sensorName] = { temperatureC: temperatureC, humidityRel: humidityRel };
     const now = new Date();
-    await fsp.ftruncate(sensorToLatestFd[sensorName].fdTemperature);
-    await fsp.ftruncate(sensorToLatestFd[sensorName].fdHumidity);
-    writeSensorVal(sensorToLatestFd[sensorName].fdTemperature, temperatureC, now, false);
-    writeSensorVal(sensorToLatestFd[sensorName].fdHumidity, humidityRel, now, false);
+    writeSensorVal(sensorToLatestFd[sensorName].fdTemperature, temperatureC, now, false, true);
+    writeSensorVal(sensorToLatestFd[sensorName].fdHumidity, humidityRel, now, false, true);
 }
 
 function onTwoMinuteIntervall() {
-    info("In onTwoMinuteIntervall.");
+    isInfo && info("In onTwoMinuteIntervall.");
     for (const sensor of config.sensors) {
         const now = new Date();
         // Do not wait for writeSensorVal to return.
-        writeSensorVal(sensorToValuesFd[sensor.name].fdTemperature, sensorToVal[sensor.name].temperatureC, now, true);
-        writeSensorVal(sensorToValuesFd[sensor.name].fdHumidity, sensorToVal[sensor.name].humidityRel, now, true);
+        writeSensorVal(sensorToValuesFd[sensor.name].fdTemperature, sensorToVal[sensor.name].temperatureC, now, true, false);
+        writeSensorVal(sensorToValuesFd[sensor.name].fdHumidity, sensorToVal[sensor.name].humidityRel, now, true, false);
     }
 }
 
-async function writeSensorVal(fd: number, sensorVal: number, date: Date, addNewLine: boolean) {
-    info(`In writeSensorVal. fd '${fd}',  sensorVal '${sensorVal}', date '${date}', addNewLine '${addNewLine}'.`);
+async function writeSensorVal(fd: number, sensorVal: number, date: Date, addNewLine: boolean, writeAtBeginning: boolean) {
+    isInfo && info(`In writeSensorVal. fd '${fd}',  sensorVal '${sensorVal}', date '${date}', addNewLine '${addNewLine}'.`);
     // Length of a data line in the output file excluding \n character.
     const totalRowLen = 32;
     const dateWithPadding = getIsoDate(date) + ",      ";
     const sensorValStr = sensorVal.toFixed(1);
     const row = dateWithPadding.substr(0, totalRowLen - sensorValStr.length) + sensorValStr + (addNewLine ? "\n" : "");
-    await fsp.write(fd, row);
+    // If the existing content size is equal to the written content size, then setting position to 0 replaces all existing content.
+    const position = writeAtBeginning ? 0 : undefined;
+    await fsp.write(fd, row, position);
 }
 
 // Ensures the baseDir directory exists, opens the temperatureValues files and writes a header if the file is empty.
 async function openFilesEnsureHeader() {
-    info("In openFilesEnsureHeader");
+    isInfo && info("In openFilesEnsureHeader");
     async function openFilesEnsureHeaderHelper(filePath: string, header: string) {
-        info(`Opening or creating file '${filePath}' and writing header if it contains zero bytes.`);
+        isInfo && info(`Opening or creating file '${filePath}' and writing header if it contains zero bytes.`);
         const fd = await fsp.open(filePath, "a");
         const fstat = await fsp.fstat(fd);
         if (fstat.stats.size === 0) {
@@ -103,8 +105,8 @@ async function openFilesEnsureHeader() {
     }
 
     for (const sensor of config.sensors) {
-        const dir = path.resolve(baseDir, sensor.outputBasepath, sensor.name);
-        info(`Creating directory '${dir}' for sensor data files if not existing.`);
+        const dir = path.resolve(baseDir, config.sensordataBasepath, sensor.name);
+        isInfo && info(`Creating directory '${dir}' for sensor data files if not existing.`);
         await fsp.mkdirp(dir);
 
         const fdTemperature = await openFilesEnsureHeaderHelper(sensor.temperatureValuesPath, "Iso Date,Temperature in Celsius\n");
@@ -121,6 +123,7 @@ async function main() {
     // Do not log method name, because logfile is not open yet.
     config = await processConfig(baseDir, configFileName, log);
     await initLogger(config.logfilePath, config.loglevel);
+    isInfo = isLoglevelInfoOrVerboser();
     // Log once to console to give a feedback that the script started successfully.
     console.info(`Script started. See the '${configFileName}' for the logfilePath and the output directory of the sensor values.`);
     await openFilesEnsureHeader();

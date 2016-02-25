@@ -14,7 +14,6 @@ import * as fsp from "./fs-promises";
 import "./global-extensions";
 import { loglevels } from "./logger";
 
-const configFilename            = "sensorconfig.json";
 const temperatureValuesFilename = "temperature_celsius.csv";
 const temperatureLatestFilename = "temperature_celsius_latest.csv";
 const humidityValuesFilename    = "humidity_percent.csv";
@@ -22,7 +21,6 @@ const humidityLatestFilename    = "humidity_percent_latest.csv";
 
 export interface Sensor {
     name:                  string;
-    outputBasepath:        string;
     type:                  number;
     pin:                   number;
     temperatureValuesPath: string;
@@ -32,24 +30,25 @@ export interface Sensor {
 }
 
 export interface Config {
-    sensors:        Sensor[];
-    loglevel:       string;
-    logfilePath:    string;
-    baseDir:        string;
+    sensors:            Sensor[];
+    sensordataBasepath: string;
+    loglevel:           string;
+    logfilePath:        string;
+    baseDir:            string;
 }
 
-export async function processConfig(baseDir: string, configName: string, logFn: { (level: string, format: string, ...params: any[]): void }) {
-    const configPath = path.resolve(baseDir, configFilename);
+export async function processConfig(baseDir: string, configFileName: string, logFn: { (level: string, format: string, ...params: any[]): void }) {
+    const configPath = path.resolve(baseDir, configFileName);
     const config = await parseConfig(configPath);
     checkConfig(config, configPath, logFn);
     config.baseDir = baseDir;
     config.logfilePath = path.resolve(baseDir, config.logfilePath);
 
     for (const sensor of config.sensors) {
-        sensor.temperatureValuesPath = path.resolve(baseDir, path.join(sensor.outputBasepath, sensor.name, temperatureValuesFilename));
-        sensor.temperatureLatestPath = path.resolve(baseDir, path.join(sensor.outputBasepath, sensor.name, temperatureLatestFilename));
-        sensor.humidityValuesPath = path.resolve(baseDir, path.join(sensor.outputBasepath, sensor.name, humidityValuesFilename));
-        sensor.humidityLatestPath = path.resolve(baseDir, path.join(sensor.outputBasepath, sensor.name, humidityLatestFilename));
+        sensor.temperatureValuesPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.name, temperatureValuesFilename));
+        sensor.temperatureLatestPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.name, temperatureLatestFilename));
+        sensor.humidityValuesPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.name, humidityValuesFilename));
+        sensor.humidityLatestPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.name, humidityLatestFilename));
     }
     return config;
 }

@@ -8,7 +8,7 @@ git clone https://github.com/HardwareProjects/dht2csv.git
 cd dht2csv
 npm install
 
-# Now open the sensorconfig.json file and check the sensor pin and other settings.
+# Now open the config.json file and check the sensor pin and other settings.
 
 # Copy gpio rules that are needed to start the script without sudo.
 sudo cp install/20-gpio.rules /etc/udev/rules.d
@@ -30,5 +30,5 @@ sudo reboot
 systemctl status dht2csv.service
 
 # Check the output.
-cd ~/projects/dht2csv/data-files
+cd ~/projects/dht2csv/sensordata
 ```

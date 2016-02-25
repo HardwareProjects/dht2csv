@@ -17,9 +17,6 @@
     "raspberrypi"
   ],
   "main": "lib/app.js",
-  "bin": {
-    "dht2csv": "./dht2csv"
-  },
   "scripts": {
     "start": "node lib/app.js"
   },
@@ -29,7 +26,7 @@
     "url": "http://hardwareprojects.com"
   },
   "license": "MIT",
-    "engines": {
+  "engines": {
     "node": ">=5.1.0"
   },
   "dependencies": {
