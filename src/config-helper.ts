@@ -12,43 +12,46 @@ const stripcomment = require("strip-json-comments");
 
 import * as fsp from "./fs-promises";
 import "./global-extensions";
-import { loglevels } from "./logger";
 
 const temperatureValuesFilename = "temperature_celsius.csv";
 const temperatureLatestFilename = "temperature_celsius_latest.csv";
 const humidityValuesFilename    = "humidity_percent.csv";
 const humidityLatestFilename    = "humidity_percent_latest.csv";
 
+export interface Config {
+    // Values from config.json:
+    sensors:            Sensor[];
+    sensordataBasepath: string;
+    loglevel:           string;
+    // Calculated values:
+    baseDir:            string;
+}
+
 export interface Sensor {
-    name:                  string;
-    type:                  number;
+    // Values from config.json:
     pin:                   number;
+    type:                  number;
+    dataSubdirectory:      string;
+    temperatureDataName:   string;
+    humidityDataName:      string;
+    // Calculated values:
     temperatureValuesPath: string;
     temperatureLatestPath: string;
     humidityValuesPath:    string;
     humidityLatestPath:    string;
 }
 
-export interface Config {
-    sensors:            Sensor[];
-    sensordataBasepath: string;
-    loglevel:           string;
-    logfilePath:        string;
-    baseDir:            string;
-}
-
-export async function processConfig(baseDir: string, configFileName: string, logFn: { (level: string, format: string, ...params: any[]): void }) {
+export async function processConfig(baseDir: string, configFileName: string, logFn: { (format: string, ...params: any[]): void }) {
     const configPath = path.resolve(baseDir, configFileName);
     const config = await parseConfig(configPath);
-    checkConfig(config, configPath, logFn);
+    checkConfig(config, configPath);
     config.baseDir = baseDir;
-    config.logfilePath = path.resolve(baseDir, config.logfilePath);
 
     for (const sensor of config.sensors) {
-        sensor.temperatureValuesPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.name, temperatureValuesFilename));
-        sensor.temperatureLatestPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.name, temperatureLatestFilename));
-        sensor.humidityValuesPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.name, humidityValuesFilename));
-        sensor.humidityLatestPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.name, humidityLatestFilename));
+        sensor.temperatureValuesPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.temperatureDataName + ".csv"));
+        sensor.temperatureLatestPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.temperatureDataName + "_latest.csv"));
+        sensor.humidityValuesPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.humidityDataName + ".csv"));
+        sensor.humidityLatestPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.humidityDataName + "_latest.csv"));
     }
     return config;
 }
@@ -69,31 +72,32 @@ function parseConfig(configPath: string) {
     });
 }
 
-function checkConfig(config: Config, configPath: string, logFn: { (level: string, format: string, ...params: any[]): void }) {
+function checkConfig(config: Config, configPath: string) {
     const errors = [] as string[];
-    if (config.sensors == null || config.sensors.length === 0) {
+    if (! config.sensors || config.sensors.length === 0) {
         errors.push("No sensors defnined.");
     }
-    if (config.loglevel == null || _.keys(loglevels).contains(config.loglevel) === false) {
-        errors.push("loglevel not supported, must be 'error', 'warn', 'info', 'verbose', 'debug' or 'silly'.");
-    }
     for (const sensor of config.sensors) {
-        if (sensor.name == null || typeof sensor.name !== "string" || sensor.name === "") {
-            errors.push("Sensor name property cannot be empty.");
+        if (! sensor.temperatureDataName || typeof sensor.temperatureDataName !== "string" || sensor.temperatureDataName === "") {
+            errors.push("temperatureDataName property cannot be empty.");
         }
-        if (sensor.type == null || typeof sensor.type !== "number" || [11, 22].contains(sensor.type) === false)  {
-            errors.push("Sensor type property must be 11 or 22.");
+        if (! sensor.humidityDataName || typeof sensor.humidityDataName !== "string" || sensor.humidityDataName === "") {
+            errors.push("humidityDataName property cannot be empty.");
         }
-        if (sensor.pin == null || typeof sensor.pin !== "number" || sensor.pin < 1 || sensor.pin > 40)  {
+        if (! sensor.pin || typeof sensor.pin !== "number" || sensor.pin < 1 || sensor.pin > 40)  {
             errors.push("Sensor pin property must be a number between 1 and 40.");
+        }
+        if (!sensor.type || typeof sensor.type !== "number" || [11, 22].contains(sensor.type) === false)  {
+            errors.push("Sensor type property must be 11 or 22.");
         }
     }
     if (errors.length > 0) {
-        logFn("error", "Some values in the config file are not correct.");
-        logFn("error", "Check the file '" + configPath + "' for the following errors:");
+        let warnings = [] as string[];
+        warnings.push("Some values in the config file are not correct.");
+        warnings.push(`Check the file '${configPath}' for the following errors:`);
         for (const err of errors) {
-            logFn("error", err);
+            warnings.push(err);
         }
-        process.exit(1);
+        throw new Error(`Error while parsing config file '${configPath}'.\n${warnings.join("\n")}`);
     }
 }

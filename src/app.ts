@@ -19,35 +19,38 @@ import * as fsp from "./fs-promises";
 import * as processp from "./process-promises";
 import { Sensor, Config, processConfig } from "./config-helper";
 import { getIsoDate } from "./isodate-helper";
-import { init as initLogger, info, warn, log, isInfo as isLoglevelInfoOrVerboser } from "./logger";
+import { getLogger, Loglevel, isInfoOrVerboser } from "./log-helper";
 
 // This file is located in the lib subdirectory when executed, so baseDir is one level up.
 const baseDir = path.resolve(__dirname, "..");
 const configFileName = "config.json";
 let config: Config = null;
-// will be set to true if the logging level is info or higher.
+// Will be set to true if the logging level is info or higher.
 let isInfo: boolean = null;
+const error = getLogger(Loglevel.ERROR, path.basename(__filename));
+const warn = getLogger(Loglevel.WARN, path.basename(__filename));
+const info = getLogger(Loglevel.INFO, path.basename(__filename));
 
 
 // Lookup with the sensorName as key and the file descriptors for the 2 minutes historical values as value.
-let sensorToValuesFd: { [sensorName: string]: { fdTemperature: number, fdHumidity: number } } = {};
+let sensorToValuesFd: { [sensorPin: number]: { fdTemperature: number, fdHumidity: number } } = {};
 // Lookup with the sensorName as key and the file descriptors for the 2 seconds historical values as value.
-let sensorToLatestFd: { [sensorName: string]: { fdTemperature: number, fdHumidity: number } } = {};
-// Lookup with the sensorName as key and the latest sensor value as value.
-let sensorToVal: { [sensorName: string]: { temperatureC: number, humidityRel: number } } = {};
+let sensorToLatestFd: { [sensorPin: number]: { fdTemperature: number, fdHumidity: number } } = {};
+// Lookup with the sensorPin as key and the latest sensor value as value.
+let sensorToVal: { [sensorPin: number]: { temperatureC: number, humidityRel: number } } = {};
 
 // Function is called recursively after the 2 second timeout.
 function readSensors(sensor: Sensor, count: number) {
-    isInfo && info(`In readSensors. sensor.name '${sensor.name}', sensor.pin '${sensor.pin}', count '${count}'.`);
-    const readout = sensorLib.read();
+    isInfo && info(`In readSensors. sensor.pin '${sensor.pin}', count '${count}'.`);
+    const readout = sensorLib.readSpec(sensor.type, sensor.pin);
     const hrstart = process.hrtime();
     if (readout.isValid === false) {
-        warn(`Error reading sensor with name '${sensor.name}', type '${sensor.type}' on pin '${sensor.pin}'. Error count '${readout.errors}'.`);
+        warn(`Error reading sensor on pin '${sensor.pin}', type '${sensor.type}'. Error count '${readout.errors}'.`);
     } else {
         // Skip first 2 readouts because they are 0.
         if (++count > 2) {
             // Do not wait until data is written.
-            onNewSensorReadout(sensor.name, readout.temperature, readout.humidity);
+            onNewSensorReadout(sensor.pin, readout.temperature, readout.humidity);
         }
     }
     const hrend = process.hrtime(hrstart);
@@ -61,12 +64,12 @@ function readSensors(sensor: Sensor, count: number) {
 }
 
 // Function is called when a new sensor value was read. This is about every 2 seconds.
-async function onNewSensorReadout(sensorName: string, temperatureC: number, humidityRel: number) {
-    isInfo && info(`In onNewSensorReadout. sensorName '${sensorName}', temperatureC '${temperatureC}', humidityRel '${humidityRel}'.`);
-    sensorToVal[sensorName] = { temperatureC: temperatureC, humidityRel: humidityRel };
+async function onNewSensorReadout(sensorPin: number, temperatureC: number, humidityRel: number) {
+    isInfo && info(`In onNewSensorReadout. sensorPin '${sensorPin}', temperatureC '${temperatureC}', humidityRel '${humidityRel}'.`);
+    sensorToVal[sensorPin] = { temperatureC: temperatureC, humidityRel: humidityRel };
     const now = new Date();
-    writeSensorVal(sensorToLatestFd[sensorName].fdTemperature, temperatureC, now, false, true);
-    writeSensorVal(sensorToLatestFd[sensorName].fdHumidity, humidityRel, now, false, true);
+    writeSensorVal(sensorToLatestFd[sensorPin].fdTemperature, temperatureC, now, false, true);
+    writeSensorVal(sensorToLatestFd[sensorPin].fdHumidity, humidityRel, now, false, true);
 }
 
 function onTwoMinuteIntervall() {
@@ -74,8 +77,8 @@ function onTwoMinuteIntervall() {
     for (const sensor of config.sensors) {
         const now = new Date();
         // Do not wait for writeSensorVal to return.
-        writeSensorVal(sensorToValuesFd[sensor.name].fdTemperature, sensorToVal[sensor.name].temperatureC, now, true, false);
-        writeSensorVal(sensorToValuesFd[sensor.name].fdHumidity, sensorToVal[sensor.name].humidityRel, now, true, false);
+        writeSensorVal(sensorToValuesFd[sensor.pin].fdTemperature, sensorToVal[sensor.pin].temperatureC, now, true, false);
+        writeSensorVal(sensorToValuesFd[sensor.pin].fdHumidity, sensorToVal[sensor.pin].humidityRel, now, true, false);
     }
 }
 
@@ -105,25 +108,24 @@ async function openFilesEnsureHeader() {
     }
 
     for (const sensor of config.sensors) {
-        const dir = path.resolve(baseDir, config.sensordataBasepath, sensor.name);
+        const dir = path.resolve(baseDir, config.sensordataBasepath, sensor.dataSubdirectory);
         isInfo && info(`Creating directory '${dir}' for sensor data files if not existing.`);
         await fsp.mkdirp(dir);
 
         const fdTemperature = await openFilesEnsureHeaderHelper(sensor.temperatureValuesPath, "Iso Date,Temperature in Celsius\n");
         const fdHumidity = await openFilesEnsureHeaderHelper(sensor.humidityValuesPath, "Iso Date,Humidity in %\n");
-        sensorToValuesFd[sensor.name] = { fdTemperature: fdTemperature, fdHumidity: fdHumidity };
+        sensorToValuesFd[sensor.pin] = { fdTemperature: fdTemperature, fdHumidity: fdHumidity };
 
         const fdTemperatureLatest = await fsp.open(sensor.temperatureLatestPath, "w");
         const fdHumidityLatest = await fsp.open(sensor.humidityLatestPath, "w");
-        sensorToLatestFd[sensor.name] = { fdTemperature: fdTemperatureLatest, fdHumidity: fdHumidityLatest };
+        sensorToLatestFd[sensor.pin] = { fdTemperature: fdTemperatureLatest, fdHumidity: fdHumidityLatest };
     }
 }
 
 async function main() {
     // Do not log method name, because logfile is not open yet.
-    config = await processConfig(baseDir, configFileName, log);
-    await initLogger(config.logfilePath, config.loglevel);
-    isInfo = isLoglevelInfoOrVerboser();
+    config = await processConfig(baseDir, configFileName, warn);
+    isInfo = isInfoOrVerboser(config.loglevel);
     // Log once to console to give a feedback that the script started successfully.
     console.info(`Script started. See the '${configFileName}' for the logfilePath and the output directory of the sensor values.`);
     await openFilesEnsureHeader();
@@ -144,5 +146,5 @@ async function main() {
 }
 
 main().catch(err => {
-    log("error", err);
+    error(err);
 });

@@ -6,23 +6,24 @@
     // Each object describes a sensor.
     "sensors": [ 
         // The path and name of the output files with the sensor values are:
-        // ${sensordataBasepath}/${name}/temperature_celsius.csv and 
-        // ${sensordataBasepath}/${name}/humidity_percent.csv
+        // ${sensordataBasepath}/${dataSubdirectory}/${temperatureDataName}.csv and 
+        // ${sensordataBasepath}/${dataSubdirectory}/${humidityDataName}.csv
         {
-            // Name of the sensor. Must be a valid folder name. Can be hierarchical like "floor1/south-terrace"
-            "name": "living-room",
+            // GPIO pin of sensor.
+            "pin": 4,
             // Sensor type: 11 (DHT11) or 22 (DHT22 or AM2302)
             "type": 22,
-            // GPIO pin of sensor.
-            "pin": 4
+		    // Directory, relative to 'sensordataBasepath' where to save the data files.
+            "dataSubdirectory": "office/",
+            // Name for the temperature data of the sensor. A .csv file with that name will be created.
+            "temperatureDataName": "temperature",
+			// Name for the humidity data of the sensor. A .csv file with that name will be created.
+            "humidityDataName": "humidity"
         }
     ],
-    // Relative or absolute base path for the sesnsordata csv files.
+    // Base folder path for the sesnsordata csv files. Relative to the directory of this file or absolute path.
     "sensordataBasepath": "./sensordata/",
             
-    // Verbosity of the log messages. Eg: "warn" (log unmet assumtions and errors) or "debug" (log as much as possible)
-    "loglevel": "debug",
-
-    // File path where to write warnings, errors or debug messages. Can be absolute or relative. Use "stdout" for standard output.
-    "logfilePath": "dht2csv.js.log"
+    // Verbosity of the log messages printed to the console. Supported are "OFF", "FATAL", "ERROR", "WARN", "INFO", "DEBUG", "ALL".
+    "loglevel": "debug"
 }

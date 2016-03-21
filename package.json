@@ -18,7 +18,9 @@
   ],
   "main": "lib/app.js",
   "scripts": {
-    "start": "node lib/app.js"
+    "start": "node --harmony_destructuring --harmony_rest_parameters --harmony_array_includes lib/app.js",
+    "build": "tsc -p src/ && echo build success",
+    "test": "tsc -p test/ && echo build success"
   },
   "author": {
     "name": "David Neuy",
