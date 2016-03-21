@@ -53,7 +53,7 @@ export function getLogger(loglevel: string, logMessagePrefix?: string) {
     return (format: any, ...params: any[]) =>
         logFn( (Config.isLogWithTimestamp ? (new Date()).toISOString() + " " : "")
                + (Config.isLogWithPrefix ? "[" + loglevel + "] '" + logMessagePrefix + "' - " : "")
-               + util.format(format, params)
+               + (! params || params === []) ? util.format(format) : util.format(format, params)
                + (format instanceof Error ? "\n" + format.stack : ""));
 }
 

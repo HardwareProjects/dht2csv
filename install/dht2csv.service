@@ -9,7 +9,8 @@
 Description=Reads DHT22, DHT11 or AM2302 sensor values, writes to CSV. 
  
 [Service]
-ExecStart=/usr/bin/npm start /home/pi/projects/dht2csv
+ExecStart=/usr/bin/npm start
+WorkingDirectory=/home/pi/projects/dht2csv
 Restart=always
 User=pi
 Group=pi

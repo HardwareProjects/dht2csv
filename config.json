@@ -1,5 +1,4 @@
 // This is the config file which is used by the dht2csv app.
-
 {
     // Specify information about the attached DHT temperature and humidity sensors here.
     // The property 'sensors' contains an array of objects.
