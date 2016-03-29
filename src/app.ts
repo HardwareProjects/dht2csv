@@ -17,20 +17,17 @@ import * as sensorLib from "node-dht-sensor";
 import "./global-extensions";
 import * as fsp from "./fs-promises";
 import * as processp from "./process-promises";
-import { Sensor, Config, processConfig } from "./config-helper";
+import { Sensor, Config, parseConfig, processConfig } from "./config-helper";
 import { getIsoDate } from "./isodate-helper";
-import { getLogger, Loglevel, isInfoOrVerboser } from "./log-helper";
+import { Logger, LogLevel, isInfoOrVerboser, LoggerOptions } from "./log-helper";
 
-// This file is located in the lib subdirectory when executed, so baseDir is one level up.
-const baseDir = path.resolve(__dirname, "..");
+// This file is located in the lib subdirectory when executed, so baseDir is one level up. Export for unit test. 
+export let baseDir = path.resolve(__dirname, "..");
 const configFileName = "config.json";
 let config: Config = null;
 // Will be set to true if the logging level is info or higher.
 let isInfo: boolean = null;
-const error = getLogger(Loglevel.ERROR, path.basename(__filename));
-const warn = getLogger(Loglevel.WARN, path.basename(__filename));
-const info = getLogger(Loglevel.INFO, path.basename(__filename));
-
+let log: Logger = null;
 
 // Lookup with the sensorName as key and the file descriptors for the 2 minutes historical values as value.
 let sensorToValuesFd: { [sensorPin: number]: { fdTemperature: number, fdHumidity: number } } = {};
@@ -41,11 +38,11 @@ let sensorToVal: { [sensorPin: number]: { temperatureC: number, humidityRel: num
 
 // Function is called recursively after the 2 second timeout.
 function readSensors(sensor: Sensor, count: number) {
-    isInfo && info(`In readSensors. sensor.pin '${sensor.pin}', count '${count}'.`);
+    isInfo && log.info(`In readSensors. sensor.pin '${sensor.pin}', count '${count}'.`);
     const readout = sensorLib.readSpec(sensor.type, sensor.pin);
     const hrstart = process.hrtime();
     if (readout.isValid === false) {
-        warn(`Error reading sensor on pin '${sensor.pin}', type '${sensor.type}'. Error count '${readout.errors}'.`);
+        log.warn(`Error reading sensor on pin '${sensor.pin}', type '${sensor.type}'. Error count '${readout.errors}'.`);
     } else {
         // Skip first 2 readouts because they are 0.
         if (++count > 2) {
@@ -65,7 +62,7 @@ function readSensors(sensor: Sensor, count: number) {
 
 // Function is called when a new sensor value was read. This is about every 2 seconds.
 async function onNewSensorReadout(sensorPin: number, temperatureC: number, humidityRel: number) {
-    isInfo && info(`In onNewSensorReadout. sensorPin '${sensorPin}', temperatureC '${temperatureC}', humidityRel '${humidityRel}'.`);
+    isInfo && log.info(`In onNewSensorReadout. sensorPin '${sensorPin}', temperatureC '${temperatureC}', humidityRel '${humidityRel}'.`);
     sensorToVal[sensorPin] = { temperatureC: temperatureC, humidityRel: humidityRel };
     const now = new Date();
     writeSensorVal(sensorToLatestFd[sensorPin].fdTemperature, temperatureC, now, false, true);
@@ -73,7 +70,7 @@ async function onNewSensorReadout(sensorPin: number, temperatureC: number, humid
 }
 
 function onTwoMinuteIntervall() {
-    isInfo && info("In onTwoMinuteIntervall.");
+    isInfo && log.info("In onTwoMinuteIntervall.");
     for (const sensor of config.sensors) {
         const now = new Date();
         // Do not wait for writeSensorVal to return.
@@ -83,7 +80,7 @@ function onTwoMinuteIntervall() {
 }
 
 async function writeSensorVal(fd: number, sensorVal: number, date: Date, addNewLine: boolean, writeAtBeginning: boolean) {
-    isInfo && info(`In writeSensorVal. fd '${fd}',  sensorVal '${sensorVal}', date '${date}', addNewLine '${addNewLine}'.`);
+    isInfo && log.info(`In writeSensorVal. fd '${fd}',  sensorVal '${sensorVal}', date '${date.toLocaleString()}', addNewLine '${addNewLine}'.`);
     // Length of a data line in the output file excluding \n character.
     const totalRowLen = 32;
     const dateWithPadding = getIsoDate(date) + ",      ";
@@ -96,9 +93,9 @@ async function writeSensorVal(fd: number, sensorVal: number, date: Date, addNewL
 
 // Ensures the baseDir directory exists, opens the temperatureValues files and writes a header if the file is empty.
 async function openFilesEnsureHeader() {
-    isInfo && info("In openFilesEnsureHeader");
+    isInfo && log.info("In openFilesEnsureHeader");
     async function openFilesEnsureHeaderHelper(filePath: string, header: string) {
-        isInfo && info(`Opening or creating file '${filePath}' and writing header if it contains zero bytes.`);
+        isInfo && log.info(`Opening or creating file '${filePath}' and writing header if it contains zero bytes.`);
         const fd = await fsp.open(filePath, "a");
         const fstat = await fsp.fstat(fd);
         if (fstat.stats.size === 0) {
@@ -109,7 +106,7 @@ async function openFilesEnsureHeader() {
 
     for (const sensor of config.sensors) {
         const dir = path.resolve(baseDir, config.sensordataBasepath, sensor.dataSubdirectory);
-        isInfo && info(`Creating directory '${dir}' for sensor data files if not existing.`);
+        isInfo && log.info(`Creating directory '${dir}' for sensor data files if not existing.`);
         await fsp.mkdirp(dir);
 
         const fdTemperature = await openFilesEnsureHeaderHelper(sensor.temperatureValuesPath, "Iso Date,Temperature in Celsius\n");
@@ -122,10 +119,16 @@ async function openFilesEnsureHeader() {
     }
 }
 
-async function main() {
+export async function main() {
     // Do not log method name, because logfile is not open yet.
-    config = await processConfig(baseDir, configFileName, warn);
-    isInfo = isInfoOrVerboser(config.loglevel);
+    config = await parseConfig(baseDir, configFileName);
+    const logConfig = config.logger;
+    logConfig.tags = logConfig.tags || []; 
+    logConfig.tags.push(path.basename(__filename));
+    log = new Logger(logConfig);
+    isInfo = isInfoOrVerboser(logConfig.levelFilter);
+    
+    config = await processConfig(config, log.warn);
     // Log once to console to give a feedback that the script started successfully.
     console.info(`Script started. See the '${configFileName}' for the logfilePath and the output directory of the sensor values.`);
     await openFilesEnsureHeader();
@@ -145,6 +148,12 @@ async function main() {
     setInterval(onTwoMinuteIntervall, 1000 * 120);
 }
 
-main().catch(err => {
-    error(err);
-});
+if (require.main === module) {
+    main().catch(err => {
+        if(log) {
+            log.error(err);
+        } else {
+            console.error(err);
+        }
+    });
+}

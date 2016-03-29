@@ -22,7 +22,11 @@
     ],
     // Base folder path for the sesnsordata csv files. Relative to the directory of this file or absolute path.
     "sensordataBasepath": "./sensordata/",
-            
-    // Verbosity of the log messages printed to the console. Supported are "OFF", "FATAL", "ERROR", "WARN", "INFO", "DEBUG", "ALL".
-    "loglevel": "debug"
+    
+    "logger": {
+        // Verbosity of the log messages. Supported are "OFF", "ERROR", "WARN", "INFO", "DEBUG".
+        "levelFilter": "DEBUG",
+        "tagFilter": [],
+        "destinations": ["stdout", "stderr"]
+    }
 }

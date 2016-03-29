@@ -12,6 +12,7 @@ const stripcomment = require("strip-json-comments");
 
 import * as fsp from "./fs-promises";
 import "./global-extensions";
+import { LoggerOptions } from "./log-helper";
 
 const temperatureValuesFilename = "temperature_celsius.csv";
 const temperatureLatestFilename = "temperature_celsius_latest.csv";
@@ -22,9 +23,10 @@ export interface Config {
     // Values from config.json:
     sensors:            Sensor[];
     sensordataBasepath: string;
-    loglevel:           string;
+    logger:             LoggerOptions;
     // Calculated values:
     baseDir:            string;
+    configPath:         string;
 }
 
 export interface Sensor {
@@ -41,27 +43,26 @@ export interface Sensor {
     humidityLatestPath:    string;
 }
 
-export async function processConfig(baseDir: string, configFileName: string, logFn: { (format: string, ...params: any[]): void }) {
-    const configPath = path.resolve(baseDir, configFileName);
-    const config = await parseConfig(configPath);
-    checkConfig(config, configPath);
-    config.baseDir = baseDir;
-
+export async function processConfig(config: Config, logFn: { (format: string, ...params: any[]): void }) {
+    checkConfig(config);
     for (const sensor of config.sensors) {
-        sensor.temperatureValuesPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.temperatureDataName + ".csv"));
-        sensor.temperatureLatestPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.temperatureDataName + "_latest.csv"));
-        sensor.humidityValuesPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.humidityDataName + ".csv"));
-        sensor.humidityLatestPath = path.resolve(baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.humidityDataName + "_latest.csv"));
+        sensor.temperatureValuesPath = path.resolve(config.baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.temperatureDataName + ".csv"));
+        sensor.temperatureLatestPath = path.resolve(config.baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.temperatureDataName + "_latest.csv"));
+        sensor.humidityValuesPath = path.resolve(config.baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.humidityDataName + ".csv"));
+        sensor.humidityLatestPath = path.resolve(config.baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.humidityDataName + "_latest.csv"));
     }
     return config;
 }
 
-function parseConfig(configPath: string) {
+export function parseConfig(baseDir: string, configFileName: string) {
+    const configPath = path.resolve(baseDir, configFileName);
     return fsp.readFile(configPath).then(data => {
         const jsCode = data.toString();
         try {
             const stripped = stripcomment(jsCode);
             const parsed = JSON.parse(stripped) as Config;
+            parsed.baseDir = baseDir;
+            parsed.configPath = configPath;
             return parsed;
         }
         catch (ex) {
@@ -72,7 +73,7 @@ function parseConfig(configPath: string) {
     });
 }
 
-function checkConfig(config: Config, configPath: string) {
+function checkConfig(config: Config) {
     const errors = [] as string[];
     if (! config.sensors || config.sensors.length === 0) {
         errors.push("No sensors defnined.");
@@ -94,10 +95,10 @@ function checkConfig(config: Config, configPath: string) {
     if (errors.length > 0) {
         let warnings = [] as string[];
         warnings.push("Some values in the config file are not correct.");
-        warnings.push(`Check the file '${configPath}' for the following errors:`);
+        warnings.push(`Check the file '${config.configPath}' for the following errors:`);
         for (const err of errors) {
             warnings.push(err);
         }
-        throw new Error(`Error while parsing config file '${configPath}'.\n${warnings.join("\n")}`);
+        throw new Error(`Error while parsing config file '${config.configPath}'.\n${warnings.join("\n")}`);
     }
 }

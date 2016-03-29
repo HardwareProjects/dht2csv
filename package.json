@@ -38,6 +38,7 @@
     "strip-json-comments": "^2.0.1"
   },
   "devDependencies": {
-    "tape": "^4.4.0"
+    "tape": "^4.4.0",
+    "proxyquire": "^1.7.4"
   }
 }
