@@ -6,8 +6,6 @@
 
 /// <reference path="../src/app.ts" />
 
-"use strict";
-
 // To run this test in Visual Studio Code, go to View->Debug, then select the "Debug Current Unittest file" target. Then press F5.
 
 import { Logger, LogLevel, isInfoOrVerboser, LoggerOptions } from "./../src/log-helper";
