@@ -7,29 +7,21 @@
 // - Only messages that are logged should cause overhead.
 // - When logging errors or warnings, it must be ensured that the message is not lost,
 //   even if the process exits immediately afterwards. 
-// - Messages should be automatically preceeded with a formatted timestamp by default.
-// - Messages should be automatically preceeded with a developer supplied prefix as
-//   the module or feature name.
+// - Messages should contain an ISO-Date string by default.
+// - Messages should be searchable by keyword or tag.
+//   Tag examples: The module name, a feature name or the message audience (eg. developer/support/user/domain-expert).
+// - The message should be easily parsable (json).
 // - If an Error object is logged, then its stack should be logged.
-// This logger will log to the console because this provides the most flexibility
-// without duplicating functionality. If the app is started directly on the console, 
-// then the output can be redirected to a file. If the app is started in the background
-// as a service using e.g. systemd then the output can be displayed with 
-// "systemctl status <service_name.service>".
-
-// extensible design
-// featuress: tags so messages can be marked with eg their source (eg. module/layer/processing_step (eg. validation)), 
-// and their audience (eg. developer/support/user/domain-expert), 
-// json output for rich output, extensibility and easy parsing, performance 
-// because facilitates isInfo && ..., extensibility because can replace logFunction,
-// -- simple to say that all messages are logged to logfile and errors are additionally logged to stdout.
-
+// - Logging to the console and/or to a file should be simple.
+// - Logging to a file and errors additionally to stdout should be simple.
+// - The logger should be extensible so that eg. logging to a database is possible.
 
 import * as util from "util";
 
 import * as fs from "fs";
 import * as stream from "stream";
 import { EOL } from "os";
+import * as tty from "tty";
 
 /* tslint:disable:variable-name */
 export const LogLevel = {
@@ -46,12 +38,8 @@ const logLevelNames = Object.keys(LogLevel);
 export interface ApplicationOptions {
     // Specifies the minimum importance that messages must have to be logged.
     // Eg. WARN will only log messages with level WARN and ERROR.
-    levelFilter?: string;
-    // Specified the tags that messages must have to be logged.
-    // Eg. ["calculation", "*file*|database*"] will only log messages where one tag is equal to "calculation", 
-    // and another tag contains either the word "file" or starts with the word "database".
-    tagFilter?: string[];
-    // A list of destinations, that will be used be an internal or a provided logFunction.
+    level?: string;
+    // A list of destinations, that will be used by an internal or a provided logFunction.
     // Supported destination values are WritableStream, file path or the strings "stdout" or "stderr".
     destinations?: Array<string|NodeJS.WritableStream>;
     // The function that may modify the log message and write it to a destination.
@@ -64,7 +52,7 @@ export interface ModulOptions {
     tags?: string[];
 }
 
-export interface LoggerOptions extends ApplicationOptions, ModulOptions {
+export interface LoggerOptions extends ApplicationOptions {
 }
 
 export interface Message {
@@ -76,9 +64,7 @@ export interface Message {
 }
 
 const defaultOptions: LoggerOptions = {
-    levelFilter: LogLevel.DEBUG,
-    tagFilter: [],
-    tags: [],
+    level: LogLevel.DEBUG,
     destinations: [process.stdout, process.stderr],
     logFunction: allDest0WarnDest1.name,
 };
@@ -87,13 +73,21 @@ let logFunctions = new Map<string, Function>();
 logFunctions.set(allDest0WarnDest1.name, allDest0WarnDest1);
 
 // log function. The returned promise is resolved when the message is written.
+// Always write WARN or ERROR messages to destinations[1] if it exists and it is not equal to destinations[0].
+// Always write to destinations[0] except
+// - if the message was already written to the console by destinations[1] and destinations[0]
+//   is also a console (so that WARN and ERROR messages are only printed once to the console).
 function allDest0WarnDest1(message: Message, destinations: NodeJS.WritableStream[]): Promise<void> {
+    const writeToDest1 = !isInfoOrVerboser(message.level) && destinations[1] !== undefined && destinations[0] !== destinations[1];
+    const isBothTty = isTty(destinations[0]) && isTty(destinations[1]);
+    const writeToDest0 = !(writeToDest1 && isBothTty);
+    const streamA = writeToDest1 ? destinations[1] : destinations[0];
+    const streamB = writeToDest1 && writeToDest0 ? destinations[0] : null;
     return new Promise<void>((resolve, reject) => {
         const messageStr = JSON.stringify(message) + EOL;
-        destinations[0].write(messageStr, () => {
-            // Write WARN and ERROR messages also to second destination.
-            if (!isInfoOrVerboser(message.level) && destinations[1] !== undefined && destinations[0] !== destinations[1]) {
-                destinations[1].write(messageStr, () => resolve());
+        streamA.write(messageStr, () => {
+            if (streamB) {
+                streamB.write(messageStr, () => resolve());
             } else {
                 resolve();
             }
@@ -101,23 +95,25 @@ function allDest0WarnDest1(message: Message, destinations: NodeJS.WritableStream
      });
 }
 
-export class Logger implements LoggerOptions {
-    levelFilter: string;
-    tagFilter: string[];
+function isTty(writableStream: NodeJS.WritableStream) {
+    return writableStream as tty.WriteStream &&
+        // writableStream.isTTY is undefined for some streams.
+        ((writableStream as tty.WriteStream).isTTY || false);
+}
+
+export class Logger implements LoggerOptions, ModulOptions {
+    level: string;
     tags: string[];
     destinations: NodeJS.WritableStream[];
     logFunction: (message: Message, destinations: NodeJS.WritableStream[]) => Promise<void>;
     
-    constructor({ levelFilter = defaultOptions.levelFilter,
-                  tagFilter = defaultOptions.tagFilter,
-                  tags = defaultOptions.tags,
+    constructor({ levelFilter = defaultOptions.level,
                   destinations = defaultOptions.destinations,
                   logFunction = defaultOptions.logFunction,
-                } /*= defaultOptions*/) {
+                }, tags?: string[]) {
         checkLoglevel(levelFilter);
-        this.levelFilter = levelFilter;
-        this.tagFilter = tagFilter;
-        this.tags = tags;
+        this.level = levelFilter;
+        this.tags = tags || [];
         this.setDestinations(destinations);
         this.setLogFunction(logFunction);
     }
@@ -148,7 +144,7 @@ export class Logger implements LoggerOptions {
                     const s = fs.createWriteStream(dest, { flags: "a" });
                     this.destinations.push(s);
                 }
-            } else if (dest instanceof stream.Writable) {
+            } else if (dest instanceof stream.Writable || dest instanceof stream.Transform) {
                 this.destinations.push(dest);
             } else {
                 throw new TypeError(`One of the elements of argument 'destinations' has unexpected type '${typeof dest}'.`);
@@ -157,13 +153,12 @@ export class Logger implements LoggerOptions {
     }
     
     // Returns a copy of the options that were used in the constructor.
-    getOptions(): LoggerOptions {
+    getOptions(): LoggerOptions & ModulOptions {
         return {
-            levelFilter: this.levelFilter,
-            tagFilter: this.tagFilter.slice(),
-            tags: this.tags.slice(),
+            level: this.level,
             destinations: this.destinations,
             logFunction: this.logFunction,
+            tags: this.tags.slice(),
         };
     }
     
@@ -184,8 +179,15 @@ export class Logger implements LoggerOptions {
     info(arg1: any, arg2: any, arg3:any): Promise<void> {
         return this.doLog(LogLevel.INFO, arg1, arg2, arg3);
     }
+    
+    debug(message: any, ...optionalParams: any[]): Promise<void>;
+    debug(tags: string[], message: any, ...optionalParams: any[]): Promise<void>;
+    debug(arg1: any, arg2: any, arg3:any): Promise<void> {
+        return this.doLog(LogLevel.DEBUG, arg1, arg2, arg3);
+    }
 
     // An alias method for info() with additional overload that accepts LogLevel.
+    // Can be used to replace console.log().
     log(level: "OFF"|"ERROR"|"WARN"|"INFO"|"DEBUG", tags: string[], message: any, ...optionalParams: any[]): Promise<void>;
     log(message: any, ...optionalParams: any[]): Promise<void>;
     log(tags: string[], message: any, ...optionalParams: any[]): Promise<void>;
@@ -198,7 +200,7 @@ export class Logger implements LoggerOptions {
     }
     
     private doLog(level: string, arg1: any, arg2: any, arg3: any): Promise<void> {
-        if (isFirstLoglevelGreaterEqualSecond(this.levelFilter, level)) {
+        if (isFirstLoglevelGreaterEqualSecond(this.level, level)) {
             const hasTagsArg = arg1 instanceof Array ? true : false;
             const tags = hasTagsArg ? arg1 : [];
             const format = hasTagsArg ? arg2 : arg1;

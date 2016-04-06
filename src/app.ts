@@ -122,11 +122,10 @@ async function openFilesEnsureHeader() {
 export async function main() {
     // Do not log method name, because logfile is not open yet.
     config = await parseConfig(baseDir, configFileName);
-    const logConfig = config.logger;
-    logConfig.tags = logConfig.tags || []; 
-    logConfig.tags.push(path.basename(__filename));
-    log = new Logger(logConfig);
-    isInfo = isInfoOrVerboser(logConfig.levelFilter);
+    // Add filename as tag for the logger instance.
+    const tags = [path.basename(__filename)];
+    log = new Logger(config.logger, tags);
+    isInfo = isInfoOrVerboser(config.logger.level);
     
     config = await processConfig(config, log.warn);
     // Log once to console to give a feedback that the script started successfully.
