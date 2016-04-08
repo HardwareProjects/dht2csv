@@ -59,6 +59,12 @@ test("Logger test", async (assert) => {
     testStreams[1].read(); // clear stream
     assert.true(res0.tags.includes("mytag"));
     
+    await log.debug("test debug without tag. Should not log.");
+    let a = testStreams[0].read();
+    let b = testStreams[1].read();
+    assert.equal(a, null, "Should not log debug messages when logger level is info.");
+    assert.equal(b, null, "Should not log debug messages when logger level is info.");
+    
     assert.end();
 });
 

@@ -30,7 +30,7 @@ let stubSensorLib = {
     }
 };
 
-test("A passing test", async (assert) => {
+test("Call app.main", async (assert) => {
     const app = proxyquire("./../src/app", {
         "node-dht-sensor": {
             initialize: stubSensorLib.initialize,
