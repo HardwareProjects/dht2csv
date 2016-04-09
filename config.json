@@ -25,7 +25,7 @@
     
     "logger": {
         // Verbosity of the log messages. Supported are "OFF", "ERROR", "WARN", "INFO", "DEBUG".
-        "level": "DEBUG",
-        "destinations": ["stdout", "stderr"]
+        "level": "WARN",
+        "destinations": ["dht2csv.log", "stderr"]
     }
 }

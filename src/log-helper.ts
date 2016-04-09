@@ -15,7 +15,8 @@
 // - Logging to the console and/or to a file should be simple.
 // - Logging to a file and errors additionally to stdout should be simple.
 // - The logger should be extensible so that eg. logging to a database is possible.
-// - Supports same method names and arguments as the console.log, console.info, console.warn and console.error methods. 
+// - Supports same method names and arguments as the console.log, console.info, console.warn and console.error methods.
+// - If the tags array argument to the log function contains the element "always" then the message is always logged. 
 
 import * as util from "util";
 import * as assert from "assert";
@@ -37,6 +38,10 @@ export const LogLevel = {
 
 const logLevelNames = Object.keys(LogLevel);
 
+export interface LogFunction {
+    (message: Message, shouldBeLogged: Boolean, destinations: NodeJS.WritableStream[]): Promise<void>;
+}
+
 export interface ApplicationOptions {
     // Specifies the minimum importance that messages must have to be logged.
     // Eg. WARN will only log messages with level WARN and ERROR.
@@ -46,7 +51,7 @@ export interface ApplicationOptions {
     destinations?: Array<string|NodeJS.WritableStream>;
     // The function that may modify the log message and write it to a destination.
     // Supported are the name of a predefined logFunction or a callback function.
-    logFunction?: string|((message: Message, destinations: NodeJS.WritableStream[]) => Promise<void>);
+    logFunction?: string|LogFunction;
 }
 
 export interface ModulOptions {
@@ -77,9 +82,12 @@ logFunctions.set(allDest0WarnDest1.name, allDest0WarnDest1);
 // log function. The returned promise is resolved when the message is written.
 // Always write WARN or ERROR messages to destinations[1] if it exists and it is not equal to destinations[0].
 // Always write to destinations[0] except
-// - if the message was already written to the console by destinations[1] and destinations[0]
+// - If the message was already written to the console by destinations[1] and destinations[0]
 //   is also a console (so that WARN and ERROR messages are only printed once to the console).
-export function allDest0WarnDest1(message: Message, destinations: NodeJS.WritableStream[]): Promise<void> {
+export function allDest0WarnDest1(message: Message, shouldBeLogged: Boolean, destinations: NodeJS.WritableStream[]): Promise<void> {
+    if (!shouldBeLogged) {
+        return Promise.resolve();
+    }
     return new Promise<void>((resolve, reject) => {
         const writeToDest1 = !isInfoOrVerboser(message.level) && destinations[1] !== undefined && destinations[0] !== destinations[1];
         const isBothTty = isTty(destinations[0]) && isTty(destinations[1]);
@@ -87,6 +95,9 @@ export function allDest0WarnDest1(message: Message, destinations: NodeJS.Writabl
         const streamA = writeToDest1 ? destinations[1] : destinations[0];
         const streamB = writeToDest1 && writeToDest0 ? destinations[0] : null;
         const messageStr = JSON.stringify(message) + EOL;
+        // Writing messageStr will always write a single line with a trailing EOL, because JSON.stringify(message) 
+        // returns a string without direct line breaks. (Strings within the stringifyd json object containing "\n" 
+        // characters are escaped to "\\n" and will display as "\n" in the logger output.")
         streamA.write(messageStr, () => {
             if (streamB) {
                 streamB.write(messageStr, () => resolve());
@@ -98,16 +109,16 @@ export function allDest0WarnDest1(message: Message, destinations: NodeJS.Writabl
 }
 
 function isTty(writableStream: NodeJS.WritableStream) {
-    return writableStream as tty.WriteStream &&
+    return writableStream as tty.WriteStream
         // writableStream.isTTY is undefined for some streams.
-        ((writableStream as tty.WriteStream).isTTY || false);
+        && ((writableStream as tty.WriteStream).isTTY || false);
 }
 
 export class Logger implements LoggerOptions, ModulOptions {
     level: string;
     tags: string[];
     destinations: NodeJS.WritableStream[];
-    logFunction: (message: Message, destinations: NodeJS.WritableStream[]) => Promise<void>;
+    logFunction: LogFunction;
     
     constructor({ level = defaultOptions.level,
                   destinations = defaultOptions.destinations,
@@ -120,7 +131,7 @@ export class Logger implements LoggerOptions, ModulOptions {
         this.setLogFunction(logFunction);
     }
     
-    private setLogFunction(logFunction: string|((message: Message, destinations: NodeJS.WritableStream[]) => Promise<void>)) {
+    private setLogFunction(logFunction: string|LogFunction) {
         if (typeof logFunction === "string") {
             if (logFunctions.has(logFunction)) {
                 this.logFunction = logFunctions.get(logFunction) as any;
@@ -164,36 +175,59 @@ export class Logger implements LoggerOptions, ModulOptions {
         };
     }
     
-    error(message: any, ...optionalParams: any[]): Promise<void>;
-    error(tags: string[], message: any, ...optionalParams: any[]): Promise<void>;
-    error(arg1: any, arg2: any, ...arg3: any[]): Promise<void> {
-        return this.doLog(LogLevel.ERROR, arg1, arg2, arg3);
+    error(format: any, ...optionalParams: any[]): Promise<void> {
+        return this.doLog(LogLevel.ERROR, [], format, optionalParams);
     }
     
-    warn(message: any, ...optionalParams: any[]): Promise<void>;
-    warn(tags: string[], message: any, ...optionalParams: any[]): Promise<void>;
-    warn(arg1: any, arg2: any, ...arg3: any[]): Promise<void> {
-        return this.doLog(LogLevel.WARN, arg1, arg2, arg3);
-    }
-
-    info(message: any, ...optionalParams: any[]): Promise<void>;
-    info(tags: string[], message: any, ...optionalParams: any[]): Promise<void>;
-    info(arg1: any, arg2: any, ...arg3: any[]): Promise<void> {
-        return this.doLog(LogLevel.INFO, arg1, arg2, arg3);
+    error2(tags: string[]|string, format: any, ...optionalParams: any[]): Promise<void> {
+        return this.doLog(LogLevel.ERROR, tags, format, optionalParams);
     }
     
-    debug(message: any, ...optionalParams: any[]): Promise<void>;
-    debug(tags: string[], message: any, ...optionalParams: any[]): Promise<void>;
-    debug(arg1: any, arg2: any, ...arg3: any[]): Promise<void> {
-        return this.doLog(LogLevel.DEBUG, arg1, arg2, arg3);
+    warn(format: any, ...optionalParams: any[]): Promise<void> {
+        return this.doLog(LogLevel.WARN, [], format, optionalParams);
+    }
+    
+    warn2(tags: string[]|string, format: any, ...optionalParams: any[]): Promise<void> {
+        return this.doLog(LogLevel.WARN, tags, format, optionalParams);
     }
 
+    info(format: any, ...optionalParams: any[]): Promise<void> {
+        return this.doLog(LogLevel.INFO, [], format, optionalParams);
+    }
+    
+    info2(tags: string[]|string, format: any, ...optionalParams: any[]): Promise<void> {
+        return this.doLog(LogLevel.INFO, tags, format, optionalParams);
+    }
+    
+    debug(format: any, ...optionalParams: any[]): Promise<void> {
+        return this.doLog(LogLevel.DEBUG, [], format, optionalParams);
+    }
+    
+    debug2(tags: string[]|string, format: any, ...optionalParams: any[]): Promise<void> {
+        return this.doLog(LogLevel.DEBUG, tags, format, optionalParams);
+    }
+    
     // An alias method for info() with additional overload that accepts LogLevel.
-    log(level: "OFF"|"ERROR"|"WARN"|"INFO"|"DEBUG", tags: string[], message: any, ...optionalParams: any[]): Promise<void>;
-    log(message: any, ...optionalParams: any[]): Promise<void>;
-    log(tags: string[], message: any, ...optionalParams: any[]): Promise<void>;
-    log(arg1: any, arg2: any, arg3: any, ...arg4: any[]): Promise<void> {
-        if (typeof arg1 === "string" && logLevelNames.indexOf(arg1) !== -1) {
+    log(level: "OFF"|"ERROR"|"WARN"|"INFO"|"DEBUG", format: any, ...optionalParams: any[]): Promise<void>;
+    log(format: any, ...optionalParams: any[]): Promise<void>;
+    log(arg1: any, arg2: any, ...arg3: any[]): Promise<void> {
+        if (typeof arg1 === "string" && logLevelNames.includes(arg1)) {
+            return this.doLog(arg1, [], arg2, arg3);
+        } else {
+            // arg1 contains the format string and arg2 and arg3 the format arguments.
+            let formatArgs = arg3 as any[];
+            if (arg2 !== undefined) {
+                formatArgs = [arg2].concat(arg3);
+            }
+            return this.doLog(LogLevel.INFO, [], arg1, formatArgs);
+        }
+    }
+
+    // An alias method for info2() with additional overload that accepts LogLevel.
+    log2(level: "OFF"|"ERROR"|"WARN"|"INFO"|"DEBUG", tags: string[]|string, format: any, ...optionalParams: any[]): Promise<void>;
+    log2(tags: string[]|string, format: any, ...optionalParams: any[]): Promise<void>;
+    log2(arg1: any, arg2: any, arg3: any, ...arg4: any[]): Promise<void> {
+        if (typeof arg1 === "string" && logLevelNames.includes(arg1)) {
             return this.doLog(arg1, arg2, arg3, arg4);
         } else {
             // arg2 contains the format string and arg3 and arg4 the format arguments.
@@ -205,63 +239,19 @@ export class Logger implements LoggerOptions, ModulOptions {
         }
     }
     
-    private doLog(level: string, arg1: any, arg2: any, arg3: any): Promise<void> {
-        if (isFirstLoglevelGreaterEqualSecond(this.level, level)) {
-            assert(arg1 !== undefined, `Insufficient arguments to log function. (0): ${level}, (1): ${arg1}, (2): ${arg2}, (3): ${arg3}`);
-            assert(Array.isArray(arg3), "arg3 is expected to be an array because it is the ...optionalParams argument of the calling functions.");
-            let messageText: string;
-            let tags = this.tags;
-            let stack: string = null;
-            
-            // arg1 is the message with format placeholders if it contains %s or %d or %j.
-            let arg1IsFormatMessage = typeof arg1 === "string" && /%s|%d|%j/.test(arg1);
-            if (arg1IsFormatMessage) {
-                assert(arg2 !== undefined, `The argument following the format string '${arg1}' must not be empty.`);
-                messageText = util.format(arg1, [arg2].concat(arg3));
-            }
-            // arg1 is the message without format placeholders if it is the last argument.
-            else if (arg2 === undefined) {
-                assert(arg3.length === 0, "If arg2 is undefined then there must not be more arguments.");
-                messageText = util.format(arg1);
-                if (arg1 instanceof Error) {
-                    stack = arg1.stack;
-                }
-            }
-            else {
-                // arg2 is the message with format placeholders if it contains %s or %d or %j.
-                let arg2IsFormatMessage = typeof arg2 === "string" && /%s|%d|%j/.test(arg2);
-                if (arg2IsFormatMessage) {
-                    assert(arg3.length > 0, `The argument following the format string '${arg2}' must not be empty.`);
-                    messageText = util.format(arg2, arg3);
-                    // arg1 must contain tags.
-                    tags = tags.concat(arg1);
-                }
-                // arg2 is the message without format placeholders if it is the last argument.
-                else if (arg3.length === 0) {
-                    messageText = util.format(arg2);
-                    if (arg2 instanceof Error) {
-                        stack = arg2.stack;
-                    }
-                    // arg1 must contain tags.
-                    tags = tags.concat(arg1);
-                }
-                else {
-                    throw new Error(`Invalid arguments to log function. (0): ${level}, (1): ${arg1}, (2): ${arg2}, (3): ${arg3}`);
-                }
-            }
-            
-            let message = {} as Message;
-            message.isoDate = new Date().toISOString();
-            message.level = level;
-            message.tags = tags;
-            message.text = messageText;
-            if (stack) {
-                message.stack = stack;
-            }
-            return this.logFunction(message, this.destinations);
-        } else {
-            return Promise.resolve();
+    private doLog(level: string, tags: string[]|string, format: any, optionalParams: any[]): Promise<void> {
+        assert(Array.isArray(optionalParams), "optionalParams is expected to be an array because it is the ...optionalParams argument of the calling functions.");
+        const shouldBeLogged = isFirstLoglevelGreaterEqualSecond(this.level, level) || tags.includes("always");
+        let messageText = optionalParams.length > 0 ? util.format(format, optionalParams) : util.format(format);
+        let message = {} as Message;
+        message.isoDate = new Date().toISOString();
+        message.level = level;
+        message.tags = this.tags.concat(tags as any);
+        message.text = messageText;
+        if (format instanceof Error) {
+            message.stack = format.stack;
         }
+        return this.logFunction(message, shouldBeLogged, this.destinations);
     }
 }
 

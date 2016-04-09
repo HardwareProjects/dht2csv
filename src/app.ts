@@ -80,7 +80,7 @@ function onTwoMinuteIntervall() {
 }
 
 async function writeSensorVal(fd: number, sensorVal: number, date: Date, addNewLine: boolean, writeAtBeginning: boolean) {
-    isInfo && log.info(`In writeSensorVal. fd '${fd}',  sensorVal '${sensorVal}', date '${date.toLocaleString()}', addNewLine '${addNewLine}'.`);
+    isInfo && log.info(`In writeSensorVal. fd '${fd}', sensorVal '${sensorVal}', date '${date.toLocaleString()}', addNewLine '${addNewLine}'.`);
     // Length of a data line in the output file excluding \n character.
     const totalRowLen = 32;
     const dateWithPadding = getIsoDate(date) + ",      ";
@@ -128,8 +128,7 @@ export async function main() {
     isInfo = isInfoOrVerboser(config.logger.level);
     
     config = await processConfig(config, log.warn);
-    // Log once to console to give a feedback that the script started successfully.
-    console.info(`Script started. See the '${configFileName}' for the logfilePath and the output directory of the sensor values.`);
+    log.info2("always", `Script started. See the '${configFileName}' for the output directory of the sensor values and other options.`);
     await openFilesEnsureHeader();
 
     // Tell wiringPi to use /dev/gpiomem instead of /dev/gpio so that no admin privileges are needed on Raspbian.

@@ -37,7 +37,7 @@ test("Logger test", async (assert) => {
     assert.equal(res0.level, "ERROR");
     assert.equal(res0.stack.substr(0, 6), "Error:");
     assert.deepEqual(res0, res1);
-    await log.error(["mytag"], new Error("test exception with tag"));
+    await log.error2(["mytag"], new Error("test exception with tag"));
     res0 = JSON.parse(testStreams[0].read());
     testStreams[1].read(); // clear stream
     assert.true(res0.tags.includes("mytag"));
@@ -45,7 +45,7 @@ test("Logger test", async (assert) => {
     await log.warn("test warn without tag. Args: %s", "first arg");
     res0 = JSON.parse(testStreams[0].read());
     res1 = JSON.parse(testStreams[1].read());
-    await log.warn(["mytag"], "test warn with tag. Args: %s", "first arg");
+    await log.warn2(["mytag"], "test warn with tag. Args: %s", "first arg");
     res0 = JSON.parse(testStreams[0].read());
     testStreams[1].read(); // clear stream
     assert.true(res0.tags.includes("mytag"));
@@ -54,7 +54,7 @@ test("Logger test", async (assert) => {
     res0 = JSON.parse(testStreams[0].read());
     res1 = JSON.parse(testStreams[1].read());
     assert.isEqual(res1, null, "Only ERROR and WARN messages should be written to destinations[1].");
-    await log.info(["mytag"], "test info with tag. Args: %s", "first arg");
+    await log.info2(["mytag"], "test info with tag. Args: %s", "first arg");
     res0 = JSON.parse(testStreams[0].read());
     testStreams[1].read(); // clear stream
     assert.true(res0.tags.includes("mytag"));
