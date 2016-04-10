@@ -69,8 +69,8 @@ async function onNewSensorReadout(sensorPin: number, temperatureC: number, humid
     writeSensorVal(sensorToLatestFd[sensorPin].fdHumidity, humidityRel, now, false, true);
 }
 
-function onTwoMinuteIntervall() {
-    isInfo && log.info("In onTwoMinuteIntervall.");
+function onTwoMinuteInterval() {
+    isInfo && log.info("In onTwoMinuteInterval.");
     for (const sensor of config.sensors) {
         const now = new Date();
         // Do not wait for writeSensorVal to return.
@@ -105,9 +105,8 @@ async function openFilesEnsureHeader() {
     }
 
     for (const sensor of config.sensors) {
-        const dir = path.resolve(baseDir, config.sensordataBasepath, sensor.dataSubdirectory);
-        isInfo && log.info(`Creating directory '${dir}' for sensor data files if not existing.`);
-        await fsp.mkdirp(dir);
+        isInfo && log.info(`Creating directory '${sensor.dataDirectory}' for sensor data files if not existing.`);
+        await fsp.mkdirp(sensor.dataDirectory);
 
         const fdTemperature = await openFilesEnsureHeaderHelper(sensor.temperatureValuesPath, "Iso Date,Temperature in Celsius\n");
         const fdHumidity = await openFilesEnsureHeaderHelper(sensor.humidityValuesPath, "Iso Date,Humidity in %\n");
@@ -143,7 +142,11 @@ export async function main() {
     for (const sensor of config.sensors) {
         readSensors(sensor, 0);
     }
-    setInterval(onTwoMinuteIntervall, 1000 * 120);
+    // Start the 2 minute interval first after 6 seconds then every 2 minutes.
+    setTimeout(() => {
+        setInterval(onTwoMinuteInterval, 1000 * 120);
+        onTwoMinuteInterval();
+    }, 1000 * 6);
 }
 
 if (require.main === module) {

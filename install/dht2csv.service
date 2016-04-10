@@ -13,7 +13,7 @@ Type=simple
 ExecStart=/usr/bin/npm start
 WorkingDirectory=/home/pi/projects/dht2csv
 Environment=NODE_ENV=production
-Restart=no
+Restart=yes
 User=pi
 Group=pi
  

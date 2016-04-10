@@ -14,29 +14,30 @@ import * as fsp from "./fs-promises";
 import "./global-extensions";
 import { LoggerOptions } from "./log-helper";
 
-const temperatureValuesFilename = "temperature_celsius.csv";
-const temperatureLatestFilename = "temperature_celsius_latest.csv";
-const humidityValuesFilename    = "humidity_percent.csv";
-const humidityLatestFilename    = "humidity_percent_latest.csv";
-
 export interface Config {
-    // Values from config.json:
-    sensors:            Sensor[];
-    sensordataBasepath: string;
-    logger:             LoggerOptions;
-    // Calculated values:
-    baseDir:            string;
-    configPath:         string;
+    // == Values from config.json ==
+    sensors:               Sensor[];
+    sensordataBasepath:    string;
+    logger:                LoggerOptions;
+    // == Calculated values ==
+    // The base directory of the project, eg. where the config file is.
+    baseDir:               string;
+    // Absolute path to the config.json file.
+    configPath:            string;
+    // Same as sensordataBasepath but always absolute path. 
+    sensordataBasepathAbs: string;
 }
 
 export interface Sensor {
-    // Values from config.json:
+    // == Values from config.json ==
     pin:                   number;
     type:                  number;
     dataSubdirectory:      string;
     temperatureDataName:   string;
     humidityDataName:      string;
-    // Calculated values:
+    // == Calculated values ==
+    // Absolute path to the data directory of the sensor that contains the csv files.
+    dataDirectory:         string;
     temperatureValuesPath: string;
     temperatureLatestPath: string;
     humidityValuesPath:    string;
@@ -46,16 +47,17 @@ export interface Sensor {
 export async function processConfig(config: Config, logFn: { (format: string, ...params: any[]): void }) {
     checkConfig(config);
     for (const sensor of config.sensors) {
-        sensor.temperatureValuesPath = path.resolve(config.baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.temperatureDataName + ".csv"));
-        sensor.temperatureLatestPath = path.resolve(config.baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.temperatureDataName + "_latest.csv"));
-        sensor.humidityValuesPath = path.resolve(config.baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.humidityDataName + ".csv"));
-        sensor.humidityLatestPath = path.resolve(config.baseDir, path.join(config.sensordataBasepath, sensor.dataSubdirectory, sensor.humidityDataName + "_latest.csv"));
+        sensor.dataDirectory = path.join(config.sensordataBasepathAbs, sensor.dataSubdirectory);
+        sensor.temperatureValuesPath = path.join(sensor.dataDirectory, sensor.temperatureDataName + ".csv");
+        sensor.temperatureLatestPath = path.join(sensor.dataDirectory, sensor.temperatureDataName + "_latest.csv");
+        sensor.humidityValuesPath = path.join(sensor.dataDirectory, sensor.humidityDataName + ".csv");
+        sensor.humidityLatestPath = path.join(sensor.dataDirectory, sensor.humidityDataName + "_latest.csv");
     }
     return config;
 }
 
 export function parseConfig(baseDir: string, configFileName: string) {
-    const configPath = path.resolve(baseDir, configFileName);
+    const configPath = path.join(baseDir, configFileName);
     return fsp.readFile(configPath).then(data => {
         const jsCode = data.toString();
         try {
@@ -63,6 +65,12 @@ export function parseConfig(baseDir: string, configFileName: string) {
             const parsed = JSON.parse(stripped) as Config;
             parsed.baseDir = baseDir;
             parsed.configPath = configPath;
+            if (path.isAbsolute(parsed.sensordataBasepath)) {
+                parsed.sensordataBasepathAbs = parsed.sensordataBasepath;
+            }
+            else {
+                parsed.sensordataBasepathAbs = path.join(baseDir, parsed.sensordataBasepath);
+            }
             return parsed;
         }
         catch (ex) {
@@ -75,7 +83,7 @@ export function parseConfig(baseDir: string, configFileName: string) {
 
 function checkConfig(config: Config) {
     const errors = [] as string[];
-    if (! config.sensors || config.sensors.length === 0) {
+    if (!config.sensors || config.sensors.length === 0) {
         errors.push("No sensors defnined.");
     }
     for (const sensor of config.sensors) {
