@@ -23,6 +23,9 @@
     // Base folder path for the sesnsordata csv files. Relative to the directory of this file or absolute path.
     "sensordataBasepath": "./sensordata/",
     
+    // Unit of the logged temperature measurements. Can be Celsius, Fahrenheit or Kelvin.
+    "temperatureUnit": "Celsius", 
+    
     "logger": {
         // Verbosity of the log messages. Supported are "OFF", "ERROR", "WARN", "INFO", "DEBUG".
         "level": "WARN",

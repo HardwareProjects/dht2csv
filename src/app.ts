@@ -20,6 +20,7 @@ import * as processp from "./process-promises";
 import { Sensor, Config, parseConfig, processConfig } from "./config-helper";
 import { getIsoDate } from "./isodate-helper";
 import { Logger, LogLevel, isInfoOrVerboser, LoggerOptions } from "./log-helper";
+import { TemperatureUnit, temperatureUnitNames } from "./constants";
 
 // This file is located in the lib subdirectory when executed, so baseDir is one level up. Export for unit test. 
 export let baseDir = path.resolve(__dirname, "..");
@@ -46,8 +47,15 @@ function readSensors(sensor: Sensor, count: number) {
     } else {
         // Skip first 2 readouts because they are 0.
         if (++count > 2) {
+            let tempVal = readout.temperature;
+            if (config.temperatureUnit === TemperatureUnit.Fahrenheit) {
+                tempVal = 1.8 * readout.temperature + 32.0;
+            }
+            else if (config.temperatureUnit === TemperatureUnit.Kelvin) {
+                tempVal = readout.temperature + 273.15;
+            }
             // Do not wait until data is written.
-            onNewSensorReadout(sensor.pin, readout.temperature, readout.humidity);
+            onNewSensorReadout(sensor.pin, tempVal, readout.humidity);
         }
     }
     const hrend = process.hrtime(hrstart);
@@ -61,11 +69,11 @@ function readSensors(sensor: Sensor, count: number) {
 }
 
 // Function is called when a new sensor value was read. This is about every 2 seconds.
-async function onNewSensorReadout(sensorPin: number, temperatureC: number, humidityRel: number) {
-    isInfo && log.info(`In onNewSensorReadout. sensorPin '${sensorPin}', temperatureC '${temperatureC}', humidityRel '${humidityRel}'.`);
-    sensorToVal[sensorPin] = { temperatureC: temperatureC, humidityRel: humidityRel };
+async function onNewSensorReadout(sensorPin: number, temperature: number, humidityRel: number) {
+    isInfo && log.info(`In onNewSensorReadout. sensorPin '${sensorPin}', temperature '${temperature}', humidityRel '${humidityRel}'.`);
+    sensorToVal[sensorPin] = { temperatureC: temperature, humidityRel: humidityRel };
     const now = new Date();
-    writeSensorVal(sensorToLatestFd[sensorPin].fdTemperature, temperatureC, now, false, true);
+    writeSensorVal(sensorToLatestFd[sensorPin].fdTemperature, temperature, now, false, true);
     writeSensorVal(sensorToLatestFd[sensorPin].fdHumidity, humidityRel, now, false, true);
 }
 
@@ -108,7 +116,7 @@ async function openFilesEnsureHeader() {
         isInfo && log.info(`Creating directory '${sensor.dataDirectory}' for sensor data files if not existing.`);
         await fsp.mkdirp(sensor.dataDirectory);
 
-        const fdTemperature = await openFilesEnsureHeaderHelper(sensor.temperatureValuesPath, "Iso Date,Temperature in Celsius\n");
+        const fdTemperature = await openFilesEnsureHeaderHelper(sensor.temperatureValuesPath, `Iso Date,Temperature in ${config.temperatureUnit}\n`);
         const fdHumidity = await openFilesEnsureHeaderHelper(sensor.humidityValuesPath, "Iso Date,Humidity in %\n");
         sensorToValuesFd[sensor.pin] = { fdTemperature: fdTemperature, fdHumidity: fdHumidity };
 
@@ -150,9 +158,9 @@ export async function main() {
 }
 
 if (require.main === module) {
-    main().catch(err => {
+    main().catch(async (err) => {
         if(log) {
-            log.error(err);
+            await log.error(err);
         } else {
             console.error(err);
         }

@@ -13,11 +13,13 @@ const stripcomment = require("strip-json-comments");
 import * as fsp from "./fs-promises";
 import "./global-extensions";
 import { LoggerOptions } from "./log-helper";
+import { TemperatureUnit, temperatureUnitNames } from "./constants";
 
 export interface Config {
     // == Values from config.json ==
     sensors:               Sensor[];
     sensordataBasepath:    string;
+    temperatureUnit:       string;
     logger:                LoggerOptions;
     // == Calculated values ==
     // The base directory of the project, eg. where the config file is.
@@ -87,18 +89,21 @@ function checkConfig(config: Config) {
         errors.push("No sensors defnined.");
     }
     for (const sensor of config.sensors) {
-        if (! sensor.temperatureDataName || typeof sensor.temperatureDataName !== "string" || sensor.temperatureDataName === "") {
+        if (!sensor.temperatureDataName || typeof sensor.temperatureDataName !== "string" || sensor.temperatureDataName === "") {
             errors.push("temperatureDataName property cannot be empty.");
         }
-        if (! sensor.humidityDataName || typeof sensor.humidityDataName !== "string" || sensor.humidityDataName === "") {
+        if (!sensor.humidityDataName || typeof sensor.humidityDataName !== "string" || sensor.humidityDataName === "") {
             errors.push("humidityDataName property cannot be empty.");
         }
-        if (! sensor.pin || typeof sensor.pin !== "number" || sensor.pin < 1 || sensor.pin > 40)  {
+        if (!sensor.pin || typeof sensor.pin !== "number" || sensor.pin < 1 || sensor.pin > 40)  {
             errors.push("Sensor pin property must be a number between 1 and 40.");
         }
         if (!sensor.type || typeof sensor.type !== "number" || [11, 22].includes(sensor.type) === false)  {
             errors.push("Sensor type property must be 11 or 22.");
         }
+    }
+    if (!temperatureUnitNames.includes(config.temperatureUnit)) {
+        errors.push(`temperatureUnitNames must be one of: ${temperatureUnitNames.join(", ")}.`);
     }
     if (errors.length > 0) {
         let warnings = [] as string[];
