@@ -12,11 +12,11 @@
             "pin": 4,
             // Sensor type: 11 (DHT11) or 22 (DHT22 or AM2302)
             "type": 22,
-		    // Directory, relative to 'sensordataBasepath' where to save the data files.
+            // Directory, relative to 'sensordataBasepath' where to save the data files.
             "dataSubdirectory": "office/",
             // Name for the temperature data of the sensor. A .csv file with that name will be created.
             "temperatureDataName": "temperature",
-			// Name for the humidity data of the sensor. A .csv file with that name will be created.
+            // Name for the humidity data of the sensor. A .csv file with that name will be created.
             "humidityDataName": "humidity"
         }
     ],
