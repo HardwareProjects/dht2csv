@@ -1,5 +1,22 @@
 {
     "rules": {
+        "prefer-const": true,
+        "no-const-assign": true,
+        "brace-style": [
+            true,
+            "stroustrup", 
+            {
+                "allowSingleLine": true
+            }
+        ],
+        "space-before-blocks": [
+            true,
+            "always"
+        ],
+        "space-after-keywords": [
+            true,
+            "always"
+        ],
         "class-name": true,
         "comment-format": [
             true,
@@ -8,6 +25,34 @@
         "indent": [
             true,
             "spaces"
+        ],
+        "space-in-parens": [
+            true,
+            "never"
+        ],
+        "array-bracket-spacing": [
+            true,
+            "never",
+            {
+                "singleValue": false,
+                "objectsInArrays": false,
+                "arraysInArrays": false
+            }
+        ],
+        "object-curly-spacing": [
+            true,
+            "always"
+        ],
+        "operator-linebreak": [
+            true,
+            "before",
+            {
+                "overrides": { "?": "after", "=": "after", ",": "after" }
+            }
+        ],
+        "comma-style": [
+            true,
+            "last"
         ],
         "no-duplicate-variable": true,
         "no-eval": true,
@@ -23,7 +68,10 @@
             true,
             "double"
         ],
-        "semicolon": true,
+        "semicolon": [
+            true,
+            "always"
+        ],
         "triple-equals": [
             true,
             "allow-null-check"

@@ -13,9 +13,11 @@
 // compiles based on a tsconfig.json file that is present in
 // the root of the folder open in VSCode.
 {
-	"version": "0.1.0",
-    // The command is tsc. Assumes that tsc has been installed using npm install -g typescript
-	"command": "tsc",
+    "version": "0.1.0",
+    // Command is the program that runs the tasks as tsc, npm, jake, gulp.
+	"command": "npm",
+    // Argument to the command.
+    "args": ["run"],
     // Print command to output window.
 	"echoCommand": true,
     // Shell commands are executed in a shell interpreter (e.g. cmd.exe, bash, ...).
@@ -23,30 +25,26 @@
     // Show the output window always instead of only if unrecognized errors occur.
 	"showOutput": "always",
 	
-    // Available tasks for the command.
 	"tasks": [
-        // Start build task with Ctrl+Shift+b
+		// Start build task with Ctrl+Shift+b
 		{
 			"taskName": "build",
-            // Tell the tsc compiler to use the tsconfig.json from the secified folder.
-            "args": ["-p", "${workspaceRoot}/src/"],
             // If suppressTaskName is false, then the command will get the task name as argument.
-			"suppressTaskName": true,
-			// hether this task maps to the default build command.
+			"suppressTaskName": false,
+			// Whether this task maps to the default build command.
 			"isBuildCommand": true,
             // Whether this task maps to the default test command.
             "isTestCommand": false,
-			// use the standard tsc problem matcher to find compile problems
-			// in the output.
-			"problemMatcher": "$tsc"
+			// Use the standard tsc problem matcher to find compile problems in the output.
+			"problemMatcher": "$tsc",
+            // Will the task remain active and check for file changes.
+            "isWatching": false
 		},
         // Start build task with Ctrl-Shift-t
         {
 			"taskName": "test",
-            // Tell the tsc compiler to use the tsconfig.json from the secified folder.
-            "args": ["-p", "${workspaceRoot}/test/"],
             // If suppressTaskName is false, then the command will get the task name as argument.
-			"suppressTaskName": true,
+			"suppressTaskName": false,
 			// hether this task maps to the default build command.
 			"isBuildCommand": false,
             // Whether this task maps to the default test command.
